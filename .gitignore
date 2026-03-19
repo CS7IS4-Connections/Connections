@@ -1,0 +1,48 @@
+# Raw article data — never commit (4+ GB)
+articles/
+*.tar.gz
+*.tar
+*.p
+
+# Data — never commit large files
+data/raw/
+data/processed/
+
+# Keep samples and results CSVs
+!data/samples/
+!results/csv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / env
+.env
+*.key
+
+# Model cache (large)
+.cache/
+models/
