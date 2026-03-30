@@ -1,3 +1,5 @@
 datasets
+numpy
 pandas
+spacy>=3.7.0
 tqdm
