@@ -1,5 +1,13 @@
 datasets
+matplotlib
 numpy
 pandas
+rapidfuzz
+scikit-learn
+scikit-posthocs
+scipy
+seaborn
+sentence-transformers
 spacy>=3.7.0
+spacy-transformers
 tqdm

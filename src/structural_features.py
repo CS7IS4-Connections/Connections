@@ -1,18 +1,22 @@
 """
 structural_features.py
 ----------------------
-Extract structural NLP features from a preprocessing CSV (Task 2):
-spaCy POS proportions, character length, token length, TTR (type–token ratio
-on alphabetic tokens), and maximum dependency depth (per sentence, then max).
+Extract structural NLP features from captions in a preprocessing CSV.
+
+All features are derived from the caption column only, except the four
+POS-overlap columns which compare caption lemmas against article_lead lemmas.
+
+Features added:
+  Length     : token_count, word_count, char_count, sent_count
+  Complexity : avg_sent_len, dep_depth, clause_count
+  Vocabulary : ttr, content_word_prop, propn_prop
+  POS overlap: noun_overlap, verb_overlap, adj_overlap, propn_overlap
 
 Usage:
-    python -m spacy download en_core_web_sm   # once per environment
+    python -m spacy download en_core_web_trf   # once per environment
     python src/structural_features.py \\
-        --input data/samples/sample_5k.csv \\
-        --output results/csv/sample_5k_structural.csv
-
-    python src/structural_features.py --input data/processed/full.csv \\
-        --output results/csv/full_structural.csv --batch-size 100
+        --input  data/samples/sample_data_clean.csv \\
+        --output results/structural.csv
 """
 
 from __future__ import annotations
@@ -20,26 +24,17 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections import Counter
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-# Universal POS tags emitted as proportions (stable column set for downstream stats).
-POS_TAGS = (
-    "ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ",
-    "NOUN", "NUM", "PART", "PRON", "PROPN", "PUNCT",
-    "SCONJ", "SYM", "VERB", "X",
-)
+CLAUSAL_DEPS = {"ccomp", "xcomp", "advcl", "relcl", "acl"}
+CONTENT_POS  = {"NOUN", "VERB", "ADJ", "ADV"}
 
 
 def _token_depth(token) -> int:
-    d = 0
-    t = token
-    # spaCy's Token.head returns Token objects; identity (`is`) is not reliable for
-    # detecting the root because it can yield a different object instance.
-    # Stop when the head token is the token itself (by index in the Doc).
+    d, t = 0, token
     while t.head.i != t.i:
         d += 1
         t = t.head
@@ -47,123 +42,109 @@ def _token_depth(token) -> int:
 
 
 def _doc_max_dep_depth(doc) -> int:
-    depths: list[int] = []
-    for sent in doc.sents:
-        for t in sent:
-            depths.append(_token_depth(t))
+    depths = [_token_depth(t) for t in doc if not t.is_space]
     return max(depths) if depths else 0
 
 
-def _pos_proportions(doc) -> dict[str, float]:
-    counts: Counter[str] = Counter()
-    for t in doc:
-        if t.is_space:
-            continue
-        counts[t.pos_] += 1
-    total = sum(counts.values())
-    out: dict[str, float] = {}
-    for tag in POS_TAGS:
-        key = f"pos_{tag}"
-        if total == 0:
-            out[key] = np.nan
-        else:
-            out[key] = counts.get(tag, 0) / total
-    return out
+def _pos_lemmas(doc, pos_tag: str) -> set[str]:
+    return {t.lemma_.lower() for t in doc if t.pos_ == pos_tag and not t.is_space}
 
 
-def _features_for_doc(doc) -> dict[str, float | int]:
-    char_len = len(doc.text)
-    tokens = [t for t in doc if not t.is_space]
-    token_len = len(tokens)
-    alpha_lower = [t.text.lower() for t in doc if t.is_alpha]
-    if len(alpha_lower) == 0:
-        ttr = np.nan
-    else:
-        ttr = len(set(alpha_lower)) / len(alpha_lower)
+def _overlap(cap_set: set, art_set: set) -> float:
+    if not cap_set:
+        return 0.0
+    return len(cap_set & art_set) / len(cap_set)
 
-    pos = _pos_proportions(doc)
-    dep_max = _doc_max_dep_depth(doc)
 
-    row: dict[str, float | int] = {
-        "char_len": char_len,
-        "token_len": token_len,
-        "ttr": ttr,
-        "dep_depth_max": dep_max,
+def extract_features(cap_doc, art_doc) -> dict:
+    tokens = [t for t in cap_doc if not t.is_space]
+    words  = [t for t in tokens if t.is_alpha]
+    sents  = list(cap_doc.sents)
+
+    token_count = len(tokens)
+    word_count  = len(words)
+    char_count  = len(cap_doc.text)
+    sent_count  = len(sents)
+
+    sent_lens   = [len([t for t in s if not t.is_space]) for s in sents]
+    avg_sent_len = float(np.mean(sent_lens)) if sent_lens else 0.0
+    dep_depth    = _doc_max_dep_depth(cap_doc)
+    clause_count = 1 + sum(1 for t in tokens if t.dep_ in CLAUSAL_DEPS)
+
+    alpha_lower      = [t.text.lower() for t in cap_doc if t.is_alpha]
+    ttr              = len(set(alpha_lower)) / len(alpha_lower) if alpha_lower else np.nan
+    content_word_prop = (
+        sum(1 for t in tokens if t.pos_ in CONTENT_POS) / token_count
+        if token_count else np.nan
+    )
+    propn_prop = (
+        sum(1 for t in tokens if t.pos_ == "PROPN") / token_count
+        if token_count else np.nan
+    )
+
+    noun_overlap  = _overlap(_pos_lemmas(cap_doc, "NOUN"),  _pos_lemmas(art_doc, "NOUN"))
+    verb_overlap  = _overlap(_pos_lemmas(cap_doc, "VERB"),  _pos_lemmas(art_doc, "VERB"))
+    adj_overlap   = _overlap(_pos_lemmas(cap_doc, "ADJ"),   _pos_lemmas(art_doc, "ADJ"))
+    propn_overlap = _overlap(_pos_lemmas(cap_doc, "PROPN"), _pos_lemmas(art_doc, "PROPN"))
+
+    return {
+        "token_count":        token_count,
+        "word_count":         word_count,
+        "char_count":         char_count,
+        "sent_count":         sent_count,
+        "avg_sent_len":       round(avg_sent_len, 4),
+        "dep_depth":          dep_depth,
+        "clause_count":       clause_count,
+        "ttr":                ttr,
+        "content_word_prop":  content_word_prop,
+        "propn_prop":         propn_prop,
+        "noun_overlap":       round(noun_overlap, 6),
+        "verb_overlap":       round(verb_overlap, 6),
+        "adj_overlap":        round(adj_overlap, 6),
+        "propn_overlap":      round(propn_overlap, 6),
     }
-    row.update(pos)
-    return row
-
-
-def _prefix_keys(d: dict, prefix: str) -> dict:
-    return {f"{prefix}_{k}": v for k, v in d.items()}
-
-
-def extract_column_features(nlp, texts: list[str], col_prefix: str, batch_size: int) -> pd.DataFrame:
-    rows: list[dict] = []
-    for doc in tqdm(
-        nlp.pipe(texts, batch_size=batch_size),
-        total=len(texts),
-        desc=f"spaCy [{col_prefix}]",
-        leave=False,
-    ):
-        feats = _features_for_doc(doc)
-        rows.append(_prefix_keys(feats, col_prefix))
-    return pd.DataFrame(rows)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Structural features (spaCy) for preprocessing CSV")
-    parser.add_argument("--input", required=True, help="Preprocessing CSV path")
-    parser.add_argument("--output", required=True, help="Output CSV path (original columns + features)")
-    parser.add_argument("--model", default="en_core_web_sm", help="spaCy pipeline name")
-    parser.add_argument("--batch-size", type=int, default=64, help="nlp.pipe batch size")
-    parser.add_argument(
-        "--text-cols",
-        default="caption,article_lead",
-        help="Comma-separated text column names to analyse",
+    parser = argparse.ArgumentParser(
+        description="Structural NLP features extracted from captions"
     )
-    parser.add_argument("--limit", type=int, default=None, help="Process only first N rows (debug)")
+    parser.add_argument("--input",      required=True, help="Input CSV path")
+    parser.add_argument("--output",     required=True, help="Output CSV path")
+    parser.add_argument("--model",      default="en_core_web_trf", help="spaCy model name")
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--limit",      type=int, default=None, help="Process only first N rows")
     args = parser.parse_args()
 
     try:
         import spacy
     except ImportError:
-        print("Install spaCy: pip install spacy", file=sys.stderr)
+        print("pip install spacy spacy-transformers", file=sys.stderr)
         sys.exit(1)
 
     try:
-        nlp = spacy.load(args.model, disable=["ner"])
+        nlp = spacy.load(args.model)
     except OSError:
-        print(
-            f"Model {args.model!r} not found. Run: python -m spacy download {args.model}",
-            file=sys.stderr,
-        )
+        print(f"Run: python -m spacy download {args.model}", file=sys.stderr)
         sys.exit(1)
 
     df = pd.read_csv(args.input)
-    if args.limit is not None:
+    if args.limit:
         df = df.head(args.limit).copy()
 
-    text_cols = [c.strip() for c in args.text_cols.split(",") if c.strip()]
-    missing = [c for c in text_cols if c not in df.columns]
-    if missing:
-        print(f"Missing columns in CSV: {missing}. Available: {list(df.columns)}", file=sys.stderr)
-        sys.exit(1)
+    captions = df["caption"].fillna("").astype(str).tolist()
+    articles = df["article_lead"].fillna("").astype(str).tolist()
 
-    feature_blocks: list[pd.DataFrame] = []
-    for col in text_cols:
-        series = df[col].fillna("").astype(str)
-        texts = series.tolist()
-        block = extract_column_features(nlp, texts, col, args.batch_size)
-        feature_blocks.append(block)
+    print("Parsing captions ...")
+    cap_docs = list(tqdm(nlp.pipe(captions, batch_size=args.batch_size), total=len(captions)))
+    print("Parsing articles ...")
+    art_docs = list(tqdm(nlp.pipe(articles, batch_size=args.batch_size), total=len(articles)))
 
-    out = pd.concat([df.reset_index(drop=True)] + feature_blocks, axis=1)
+    rows = [extract_features(c, a) for c, a in zip(cap_docs, art_docs)]
+    out  = pd.concat([df.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
 
-    out_dir = os.path.dirname(os.path.abspath(args.output))
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     out.to_csv(args.output, index=False)
-
     print(f"Wrote {len(out):,} rows -> {args.output}")
 
 

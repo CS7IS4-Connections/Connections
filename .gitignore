@@ -8,9 +8,10 @@ articles/
 data/raw/
 data/processed/
 
-# Keep samples and results CSVs
+# Keep samples, results CSVs, and generated figures/tables for Overleaf
 !data/samples/
 !results/csv/
+!results/figures/
 
 # Python
 __pycache__/
