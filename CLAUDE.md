@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python -m spacy download en_core_web_trf   # required for all NLP scripts
+python -m spacy download en_core_web_trf
 ```
 
 ## Commands
@@ -21,28 +21,26 @@ python src/preprocessing.py --mode sample --n 5000 --output data/samples/sample_
 python src/preprocessing.py --mode full --output data/processed/full.csv
 
 # Cleaning — drop rows with empty article_lead
-python src/cleaning.py \
-    --input  data/samples/sample_5k.csv \
-    --output data/samples/sample_data_clean.csv
+python src/cleaning.py --input data/samples/sample_5k.csv --output data/samples/sample_data_clean.csv
 
 # Run full pipeline on the cleaned sample (recommended entry point)
-python run_pipeline.py \
-    --input  data/samples/sample_data_clean.csv \
-    --output results/sample_results.csv
+python run_pipeline.py --input data/samples/sample_data_clean.csv --output results/sample_results.csv
 
 # Run individual pipeline stages independently
-python src/structural_features.py --input data/samples/sample_data_clean.csv \
-    --output results/structural.csv
-python src/similarity.py     --input results/structural.csv  --output results/similarity.csv
-python src/entity_alignment.py --input results/similarity.csv  --output results/entity.csv
-python src/caption_classifier.py --input results/entity.csv   --output results/final.csv
+python src/structural_features.py --input data/samples/sample_data_clean.csv --output results/structural.csv
+python src/similarity.py --input results/structural.csv --output results/similarity.csv
+python src/entity_alignment.py --input results/similarity.csv --output results/entity.csv
+python src/caption_classifier.py --input results/entity.csv --output results/final.csv
+
+# Generate all figures and tables for the paper
+python src/visualizations.py --input results/sample_results.csv --output results/figures/
 ```
 
 There are no automated tests or a linter configured.
 
 ## Architecture
 
-The project is a **two-stage NLP pipeline** for analysing caption-article textual similarity using the [VisualNews dataset](https://huggingface.co/datasets/twelcone/VisualNews).
+The project is a **multi-stage NLP pipeline** for analysing caption-article textual similarity using the [VisualNews dataset](https://huggingface.co/datasets/twelcone/VisualNews).
 
 ### Stage 1 — `src/preprocessing.py`
 
@@ -51,7 +49,7 @@ Loads VisualNews directly from Hugging Face (`twelcone/VisualNews`). No manual d
 Key transformations:
 - Cleans text: Unicode NFKC normalisation, HTML/XML tag removal, HTML entity decoding, whitespace standardisation.
 - Truncates articles to the first 512 whitespace-separated tokens.
-- Maps 30+ raw category strings into 5 standardised categories: `politics_government`, `sport`, `business_economy`, `science_technology`, `entertainment_culture`, `world_society`.
+- Maps 30+ raw category strings into 6 standardised categories: `politics_government`, `sport`, `business_economy`, `science_technology`, `entertainment_culture`, `world_society`.
 - Handles Windows NTFS full-width colon encoding in article filenames.
 - Looks up articles via multiple strategies: UUID index, pickle metadata, JSON directory discovery. Different news outlets (Guardian, BBC, USA Today, Washington Post) use different JSON field names.
 
@@ -90,7 +88,22 @@ Placeholder — adds `caption_type = "unclassified"` for every row. The `classif
 
 Runs all four stages sequentially. Intermediate CSVs are written alongside the final output (same directory, `_step1_`…`_step3_` suffixes) for inspection. Prints a summary of row count, mean/min/max of each similarity score, and `caption_type` distribution.
 
+### `src/visualizations.py`
+
+Generates all paper figures (`.png`, 300 DPI) and tables (`.csv` + `.tex`) from the final pipeline output. Outputs go to `--output` directory (default `results/figures/`). Covers:
+
+- Descriptive: caption length histogram, similarity score distributions
+- RQ1: Pearson r heatmap + top scatter plots + correlation table
+- RQ2: similarity by caption type (skipped until classifier is implemented)
+- RQ3: entity overlap bar chart + entity Jaccard vs SBERT scatter + entity metrics table
+- RQ4: similarity by news category
+- RQ5: similarity by source + Dunn post-hoc pairwise p-value table
+
+Requires `matplotlib`, `seaborn`, `scipy`, `scikit-posthocs` (all in `requirements.txt`).
+
 ### Data layout
 
 - `data/samples/sample_data_clean.csv` — cleaned 5k-row sample (no empty article_lead), committed and ready to use.
 - `data/processed/` and `results/` — gitignored output directories.
+- `results/figures/` — tracked; contains generated PNGs and `.tex` tables for the paper.
+- `paper/main.tex` — LaTeX paper; references figures via `\graphicspath{{../results/figures/}}`.
