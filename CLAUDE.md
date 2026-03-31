@@ -70,11 +70,13 @@ Extracts features from **captions only**, except the four POS-overlap columns wh
 
 ### Stage 3 — `src/similarity.py`
 
-Adds `tfidf_sim`, `jaccard_sim`, `sbert_sim`:
+Adds `tfidf_sim`, `jaccard_sim`, `sbert_sim`. spaCy runs once to lemmatise and remove stopwords/punctuation; the resulting lemma texts and lemma sets are shared by TF-IDF and Jaccard. SBERT receives raw text.
 
-- `tfidf_sim`: sklearn TfidfVectorizer (bigrams, min_df=2, max_df=0.95) fit on combined caption+article corpus; per-row cosine similarity.
-- `jaccard_sim`: spaCy lemmatise both texts, remove stopwords/punct; |C∩A|/|C∪A| on lemma sets.
-- `sbert_sim`: `all-MiniLM-L6-v2` embeddings (sentence-transformers); cosine of normalised vectors.
+- `tfidf_sim`: TfidfVectorizer (bigrams, min_df=2, max_df=0.95) fit on combined lemmatised caption+article corpus; per-row cosine similarity.
+- `jaccard_sim`: |C∩A|/|C∪A| on lemma sets from the same spaCy pass; 0.0 if union is empty.
+- `sbert_sim`: `all-MiniLM-L6-v2` embeddings; articles truncated to **128 tokens** before encoding (TF-IDF and Jaccard use the full 512-token `article_lead`).
+
+Accepts `--caption-col` (default `caption`) and `--article-col` (default `article_lead`) to handle CSVs with different column names. Prints per-method descriptive stats and mean by source/category after writing output.
 
 ### Stage 4 — `src/entity_alignment.py`
 
