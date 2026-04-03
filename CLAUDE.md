@@ -9,6 +9,7 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_trf
+python -m spacy download en_core_web_sm
 ```
 
 ## Commands
@@ -23,8 +24,11 @@ python src/preprocessing.py --mode full --output data/processed/full.csv
 # Cleaning — drop rows with empty article_lead
 python src/cleaning.py --input data/samples/sample_5k.csv --output data/samples/sample_data_clean.csv
 
-# Run full pipeline on the cleaned sample (recommended entry point)
-python run_pipeline.py --input data/samples/sample_data_clean.csv --output results/sample_results.csv
+# Run full pipeline on the 60k dataset (recommended entry point)
+python run_pipeline.py --input data/samples/sample_60k.csv --output results/sample_results.csv
+
+# Dry-run (first 500 rows) to verify pipeline before full run
+python run_pipeline.py --input data/samples/sample_60k.csv --output results/sample_results.csv --dry-run
 
 # Run individual pipeline stages independently
 python src/structural_features.py --input data/samples/sample_data_clean.csv --output results/structural.csv
@@ -82,11 +86,18 @@ NER via `en_core_web_trf`; entity types: PERSON, GPE, ORG, DATE. Fuzzy entity ma
 
 ### Stage 5 — `src/caption_classifier.py`
 
-Placeholder — adds `caption_type = "unclassified"` for every row. The `classify()` function must be implemented once category definitions are finalised.
+Rule-based classifier based on Marsh & White (2003). Adds `caption_type` with four values: `Extractive`, `Descriptive`, `Expansive`, `Independent`. Rules fire in priority order using only raw caption text and `article_lead` — no similarity scores are referenced.
+
+- **Extractive**: caption contains quotation marks (direct speech), OR >3 of the first 5 caption content lemmas appear in article lead lemmas — and no deictic markers are present.
+- **Descriptive**: caption contains deictic/visual-location markers (e.g. "pictured", "from left", "file photo") or opens with a person name followed by a visual verb (poses, stands, sits…) — no quotation marks.
+- **Expansive**: caption contains temporal markers ("yesterday", "last week", "in 2…"), causal/contrast connectives ("amid", "despite", "following"…), or relative clause markers (", who ", ", which "…) — no quotes or deictic markers.
+- **Independent**: default; none of the above rules fire.
+
+Uses `en_core_web_sm` (not the full transformer model) for lemmatisation in the lead-overlap and visual-verb checks. Prints a distribution table (count + %) per type and per source after writing output.
 
 ### `run_pipeline.py`
 
-Runs all four stages sequentially. Intermediate CSVs are written alongside the final output (same directory, `_step1_`…`_step3_` suffixes) for inspection. Prints a summary of row count, mean/min/max of each similarity score, and `caption_type` distribution.
+Runs all four stages sequentially. Accepts `--dry-run` to process only the first 500 rows for quick verification. If the input CSV has `article_text` instead of `article_lead`, it is renamed automatically before being passed downstream. Intermediate CSVs are written alongside the final output (`_step0_input`, `_step1_`…`_step3_` suffixes). Prints a summary of shape, null counts per column, similarity score stats, and value distributions for `source`, `category`, and `caption_type`.
 
 ### `src/visualizations.py`
 
@@ -103,7 +114,8 @@ Requires `matplotlib`, `seaborn`, `scipy`, `scikit-posthocs` (all in `requiremen
 
 ### Data layout
 
-- `data/samples/sample_data_clean.csv` — cleaned 5k-row sample (no empty article_lead), committed and ready to use.
+- `data/samples/sample_data_clean.csv` — cleaned 5k-row sample (no empty article_lead).
+- `data/samples/sample_60k.csv` — larger 60k-row sample; primary input for the full pipeline. May use `article_text` column (auto-renamed to `article_lead` by `run_pipeline.py`).
 - `data/processed/` and `results/` — gitignored output directories.
 - `results/figures/` — tracked; contains generated PNGs and `.tex` tables for the paper.
 - `paper/main.tex` — LaTeX paper; references figures via `\graphicspath{{../results/figures/}}`.
