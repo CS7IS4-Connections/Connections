@@ -24,11 +24,11 @@ python src/preprocessing.py --mode full --output data/processed/full.csv
 # Cleaning — drop rows with empty article_lead
 python src/cleaning.py --input data/samples/sample_5k.csv --output data/samples/sample_data_clean.csv
 
-# Run full pipeline on the 60k dataset (recommended entry point)
-python run_pipeline.py --input data/samples/sample_60k.csv --output results/sample_results.csv
+# Run full pipeline on the cleaned sample (recommended entry point)
+python run_pipeline.py --input data/samples/sample_data_clean.csv --output results/sample_results.csv
 
 # Dry-run (first 500 rows) to verify pipeline before full run
-python run_pipeline.py --input data/samples/sample_60k.csv --output results/sample_results.csv --dry-run
+python run_pipeline.py --input data/samples/sample_data_clean.csv --output results/sample_results.csv --dry-run
 
 # Run individual pipeline stages independently
 python src/structural_features.py --input data/samples/sample_data_clean.csv --output results/structural.csv
@@ -115,7 +115,7 @@ Requires `matplotlib`, `seaborn`, `scipy`, `scikit-posthocs` (all in `requiremen
 ### Data layout
 
 - `data/samples/sample_data_clean.csv` — cleaned 5k-row sample (no empty article_lead).
-- `data/samples/sample_60k.csv` — larger 60k-row sample; primary input for the full pipeline. May use `article_text` column (auto-renamed to `article_lead` by `run_pipeline.py`).
+- `data/samples/sample_60k.csv` — larger 60k-row sample (not yet available); when present, pass via `--input`. May use `article_text` column (auto-renamed to `article_lead` by `run_pipeline.py`).
 - `data/processed/` and `results/` — gitignored output directories.
 - `results/figures/` — tracked; contains generated PNGs and `.tex` tables for the paper.
 - `paper/main.tex` — LaTeX paper; references figures via `\graphicspath{{../results/figures/}}`.

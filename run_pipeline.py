@@ -59,7 +59,7 @@ def run_step(step_n: int, script: str, input_path: str, output_path: str,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Full text-analytics pipeline")
-    parser.add_argument("--input",    default="data/samples/sample_60k.csv",
+    parser.add_argument("--input",    default="data/samples/sample_data_clean.csv",
                         help="Input CSV (expects caption + article_lead or article_text columns)")
     parser.add_argument("--output",   default="results/sample_results.csv")
     parser.add_argument("--dry-run",  action="store_true",
