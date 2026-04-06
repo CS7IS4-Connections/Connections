@@ -15,20 +15,23 @@ python -m spacy download en_core_web_sm
 ## Commands
 
 ```bash
-# Preprocessing — build the 5k sample CSV
-python src/preprocessing.py --mode sample --n 5000 --output data/samples/sample_5k.csv
+# Preprocessing — stratified 90k sample (BBC + Guardian, 15k per category)
+python src/preprocessing.py --output data/samples/sample_90k.csv --data-dir articles/articles
 
-# Preprocessing — full dataset
-python src/preprocessing.py --mode full --output data/processed/full.csv
+# Preprocessing — diagnose article lookup hit rates before full run
+python src/preprocessing.py --diagnose --data-dir articles/articles
 
-# Cleaning — drop rows with empty article_lead
-python src/cleaning.py --input data/samples/sample_5k.csv --output data/samples/sample_data_clean.csv
+# Preprocessing — dry run (500 rows only)
+python src/preprocessing.py --dry-run --output data/samples/sample_dry.csv --data-dir articles/articles
 
-# Run full pipeline on the cleaned sample (recommended entry point)
-python run_pipeline.py --input data/samples/sample_data_clean.csv --output results/sample_results.csv
+# Preprocessing — full dataset (no sampling)
+python src/preprocessing.py --mode full --output data/processed/full.csv --data-dir articles/articles
+
+# Run full pipeline on the 90k sample (recommended entry point)
+python run_pipeline.py --input data/samples/sample_90k.csv --output results/sample_results.csv
 
 # Dry-run (first 500 rows) to verify pipeline before full run
-python run_pipeline.py --input data/samples/sample_data_clean.csv --output results/sample_results.csv --dry-run
+python run_pipeline.py --input data/samples/sample_90k.csv --output results/sample_results.csv --dry-run
 
 # Run individual pipeline stages independently
 python src/structural_features.py --input data/samples/sample_data_clean.csv --output results/structural.csv
