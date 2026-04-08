@@ -7,6 +7,7 @@ articles/
 # Data — never commit large files
 data/raw/
 data/processed/
+data/sample_90k.csv
 
 # Keep samples, results CSVs, and generated figures/tables for Overleaf
 !data/samples/
