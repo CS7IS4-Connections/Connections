@@ -109,11 +109,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Structural NLP features extracted from captions"
     )
-    parser.add_argument("--input",      required=True, help="Input CSV path")
-    parser.add_argument("--output",     required=True, help="Output CSV path")
-    parser.add_argument("--model",      default="en_core_web_trf", help="spaCy model name")
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--limit",      type=int, default=None, help="Process only first N rows")
+    parser.add_argument("--input",         required=True, help="Input CSV path")
+    parser.add_argument("--output",        required=True, help="Output CSV path")
+    parser.add_argument("--model",         default="en_core_web_trf",
+                        help="spaCy model for captions (default: en_core_web_trf)")
+    parser.add_argument("--article-model", default="en_core_web_sm",
+                        help="spaCy model for article POS overlap (default: en_core_web_sm)")
+    parser.add_argument("--batch-size",    type=int, default=64)
+    parser.add_argument("--chunk-size",    type=int, default=500,
+                        help="Rows processed per chunk to limit peak memory (default: 500)")
+    parser.add_argument("--limit",         type=int, default=None,
+                        help="Process only first N rows")
     args = parser.parse_args()
 
     try:
@@ -123,25 +129,51 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        nlp = spacy.load(args.model)
+        nlp_cap = spacy.load(args.model)
     except OSError:
         print(f"Run: python -m spacy download {args.model}", file=sys.stderr)
         sys.exit(1)
+
+    # Articles only need POS lemmas for overlap — sm is sufficient and far lighter.
+    try:
+        nlp_art = spacy.load(args.article_model)
+    except OSError:
+        print(f"Warning: '{args.article_model}' not found — falling back to caption model for articles.")
+        nlp_art = nlp_cap
 
     df = pd.read_csv(args.input)
     if args.limit:
         df = df.head(args.limit).copy()
 
-    captions = df["caption"].fillna("").astype(str).tolist()
-    articles = df["article_lead"].fillna("").astype(str).tolist()
+    all_rows: list[dict] = []
+    chunk_size = args.chunk_size
+    n_chunks   = (len(df) + chunk_size - 1) // chunk_size
 
-    print("Parsing captions ...")
-    cap_docs = list(tqdm(nlp.pipe(captions, batch_size=args.batch_size), total=len(captions)))
-    print("Parsing articles ...")
-    art_docs = list(tqdm(nlp.pipe(articles, batch_size=args.batch_size), total=len(articles)))
+    for chunk_idx in range(n_chunks):
+        start = chunk_idx * chunk_size
+        end   = min(start + chunk_size, len(df))
+        chunk = df.iloc[start:end]
 
-    rows = [extract_features(c, a) for c, a in zip(cap_docs, art_docs)]
-    out  = pd.concat([df.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
+        print(f"Chunk {chunk_idx + 1}/{n_chunks}  (rows {start}–{end - 1})")
+
+        captions = chunk["caption"].fillna("").astype(str).tolist()
+        articles = chunk["article_lead"].fillna("").astype(str).tolist()
+
+        cap_docs = list(tqdm(
+            nlp_cap.pipe(captions, batch_size=args.batch_size),
+            total=len(captions), desc="  captions", leave=False,
+        ))
+        art_docs = list(tqdm(
+            nlp_art.pipe(articles, batch_size=args.batch_size),
+            total=len(articles), desc="  articles", leave=False,
+        ))
+
+        all_rows.extend(extract_features(c, a) for c, a in zip(cap_docs, art_docs))
+
+        # Release docs to free memory before the next chunk.
+        del cap_docs, art_docs
+
+    out = pd.concat([df.reset_index(drop=True), pd.DataFrame(all_rows)], axis=1)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     out.to_csv(args.output, index=False)

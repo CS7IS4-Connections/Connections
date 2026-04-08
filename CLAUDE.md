@@ -62,11 +62,11 @@ Key transformations:
 
 Output CSV columns: `item_id`, `source`, `category`, `caption`, `article_lead`, `caption_len_tokens`.
 
-All NLP scripts use `en_core_web_trf` (transformer-backed). All scripts accept `--input`, `--output`, `--model`, `--batch-size`, and `--limit` (debug) arguments.
+All NLP scripts accept `--input`, `--output`, `--model`, `--batch-size`, and `--limit` (debug) arguments.
 
 ### Stage 2 — `src/structural_features.py`
 
-Extracts features from **captions only**, except the four POS-overlap columns which compare caption lemmas against article lemmas:
+Extracts features from **captions only**, except the four POS-overlap columns which compare caption lemmas against article lemmas. Processes in chunks (`--chunk-size`, default 500) to limit peak memory — caption docs use `en_core_web_trf`, article docs use `en_core_web_sm` (`--article-model`) since only POS lemmas are needed for overlap.
 
 - **Length**: `token_count`, `word_count`, `char_count`, `sent_count`
 - **Complexity**: `avg_sent_len`, `dep_depth` (max tree depth), `clause_count` (clausal dep relations + 1)
