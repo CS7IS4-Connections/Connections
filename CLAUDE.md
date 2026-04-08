@@ -75,7 +75,7 @@ Extracts features from **captions only**, except the four POS-overlap columns wh
 
 ### Stage 3 — `src/similarity.py`
 
-Adds `tfidf_sim`, `jaccard_sim`, `sbert_sim`. spaCy runs once to lemmatise and remove stopwords/punctuation; the resulting lemma texts and lemma sets are shared by TF-IDF and Jaccard. SBERT receives raw text.
+Adds `tfidf_sim`, `jaccard_sim`, `sbert_sim`. spaCy runs once to lemmatise and remove stopwords/punctuation; the resulting lemma texts and lemma sets are shared by TF-IDF and Jaccard. SBERT receives raw text. Captions use `en_core_web_trf`; articles use `en_core_web_sm` (`--article-model`) since only lemmas are needed. Preprocessing runs in chunks (`--chunk-size`, default 1000) to control peak memory.
 
 - `tfidf_sim`: TfidfVectorizer (bigrams, min_df=2, max_df=0.95) fit on combined lemmatised caption+article corpus; per-row cosine similarity.
 - `jaccard_sim`: |C∩A|/|C∪A| on lemma sets from the same spaCy pass; 0.0 if union is empty.
@@ -85,7 +85,7 @@ Accepts `--caption-col` (default `caption`) and `--article-col` (default `articl
 
 ### Stage 4 — `src/entity_alignment.py`
 
-NER via `en_core_web_trf`; entity types: PERSON, GPE, ORG, DATE. Fuzzy entity matching uses Levenshtein similarity ≥ 0.85 (rapidfuzz). Adds `person_overlap`, `gpe_overlap`, `org_overlap`, `date_overlap` (per-type |E_cap ∩ E_art| / |E_cap|), `entity_jaccard`, and `entity_coverage` (overall metrics across all types).
+NER via `en_core_web_trf`; entity types: PERSON, GPE, ORG, DATE. Fuzzy entity matching uses Levenshtein similarity ≥ 0.85 (rapidfuzz). Adds `person_overlap`, `gpe_overlap`, `org_overlap`, `date_overlap` (per-type |E_cap ∩ E_art| / |E_cap|), `entity_jaccard`, and `entity_coverage` (overall metrics across all types). Processes in chunks (`--chunk-size`, default 500) with docs deleted after each chunk to limit peak memory.
 
 ### Stage 5 — `src/caption_classifier.py`
 

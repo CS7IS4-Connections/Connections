@@ -87,6 +87,8 @@ def main() -> None:
     parser.add_argument("--output",     required=True)
     parser.add_argument("--model",      default="en_core_web_trf")
     parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--chunk-size", type=int, default=500,
+                        help="Rows per NER chunk to limit peak memory (default: 500)")
     parser.add_argument("--limit",      type=int, default=None)
     args = parser.parse_args()
 
@@ -110,17 +112,26 @@ def main() -> None:
     captions = df["caption"].fillna("").astype(str).tolist()
     articles = df["article_lead"].fillna("").astype(str).tolist()
 
-    print("Parsing captions for NER ...")
-    cap_docs = list(tqdm(nlp.pipe(captions, batch_size=args.batch_size), total=len(captions)))
-    print("Parsing articles for NER ...")
-    art_docs = list(tqdm(nlp.pipe(articles, batch_size=args.batch_size), total=len(articles)))
+    all_rows: list[dict] = []
+    chunk_size = args.chunk_size
+    n_chunks   = (len(df) + chunk_size - 1) // chunk_size
 
-    rows = [
-        _compute_metrics(_ents_by_type(cd), _ents_by_type(ad))
-        for cd, ad in tqdm(zip(cap_docs, art_docs), total=len(cap_docs), desc="Entity alignment")
-    ]
+    for chunk_idx in tqdm(range(n_chunks), desc="Entity alignment chunks"):
+        start = chunk_idx * chunk_size
+        end   = min(start + chunk_size, len(df))
 
-    out = pd.concat([df.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
+        cap_docs = list(nlp.pipe(captions[start:end], batch_size=args.batch_size))
+        art_docs = list(nlp.pipe(articles[start:end], batch_size=args.batch_size))
+
+        all_rows.extend(
+            _compute_metrics(_ents_by_type(cd), _ents_by_type(ad))
+            for cd, ad in zip(cap_docs, art_docs)
+        )
+
+        # Free transformer doc memory before next chunk.
+        del cap_docs, art_docs
+
+    out = pd.concat([df.reset_index(drop=True), pd.DataFrame(all_rows)], axis=1)
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     out.to_csv(args.output, index=False)
     print(f"Wrote {len(out):,} rows -> {args.output}")

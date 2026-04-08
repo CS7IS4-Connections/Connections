@@ -58,13 +58,32 @@ def _lemma_set(doc) -> set[str]:
     }
 
 
-def preprocess(texts: list[str], nlp, batch_size: int, desc: str):
-    """Run spaCy over texts; return (lemma_texts, lemma_sets)."""
-    lemma_texts, lemma_sets = [], []
-    for doc in tqdm(nlp.pipe(texts, batch_size=batch_size), total=len(texts),
-                    desc=desc, leave=False):
-        lemma_texts.append(_lemmatised_text(doc))
-        lemma_sets.append(_lemma_set(doc))
+def preprocess(texts: list[str], nlp, batch_size: int, desc: str,
+               chunk_size: int = 0):
+    """Run spaCy over texts; return (lemma_texts, lemma_sets).
+
+    When chunk_size > 0 the texts are processed in chunks so peak doc-memory
+    is bounded even for large datasets.  Only the lightweight string/set
+    outputs are accumulated across chunks.
+    """
+    lemma_texts: list[str] = []
+    lemma_sets:  list[set] = []
+
+    ranges = (
+        range(0, len(texts), chunk_size) if chunk_size > 0 else [0]
+    )
+    slices = (
+        [texts[i:i + chunk_size] for i in ranges]
+        if chunk_size > 0
+        else [texts]
+    )
+
+    for chunk in tqdm(slices, desc=desc, leave=False):
+        docs = nlp.pipe(chunk, batch_size=batch_size)
+        for doc in docs:
+            lemma_texts.append(_lemmatised_text(doc))
+            lemma_sets.append(_lemma_set(doc))
+
     return lemma_texts, lemma_sets
 
 
@@ -155,12 +174,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Caption–article similarity scores")
     parser.add_argument("--input",           required=True)
     parser.add_argument("--output",          required=True)
-    parser.add_argument("--model",           default="en_core_web_trf")
-    parser.add_argument("--batch-size",      type=int, default=64)
-    parser.add_argument("--limit",           type=int, default=None)
-    parser.add_argument("--caption-col",     default="caption",
+    parser.add_argument("--model",            default="en_core_web_trf",
+                        help="spaCy model for caption lemmatisation")
+    parser.add_argument("--article-model",    default="en_core_web_sm",
+                        help="spaCy model for article lemmatisation (default: en_core_web_sm)")
+    parser.add_argument("--batch-size",       type=int, default=64)
+    parser.add_argument("--chunk-size",       type=int, default=1000,
+                        help="Rows per spaCy preprocessing chunk (default: 1000)")
+    parser.add_argument("--limit",            type=int, default=None)
+    parser.add_argument("--caption-col",      default="caption",
                         help="CSV column containing caption text")
-    parser.add_argument("--article-col",     default="article_lead",
+    parser.add_argument("--article-col",      default="article_lead",
                         help="CSV column containing article text")
     parser.add_argument("--sbert-art-tokens", type=int, default=128,
                         help="Max article tokens passed to SBERT (default 128)")
@@ -179,19 +203,27 @@ def main() -> None:
     captions = df[args.caption_col].fillna("").astype(str).tolist()
     articles = df[args.article_col].fillna("").astype(str).tolist()
 
-    # --- Load spaCy once ---
+    # --- Load spaCy models ---
     try:
         import spacy
-        nlp = spacy.load(args.model)
+        nlp_cap = spacy.load(args.model)
     except Exception as e:
-        print(f"spaCy load error: {e}", file=sys.stderr)
+        print(f"spaCy load error ({args.model}): {e}", file=sys.stderr)
         sys.exit(1)
+
+    try:
+        nlp_art = spacy.load(args.article_model)
+    except OSError:
+        print(f"Warning: '{args.article_model}' not found — using caption model for articles.")
+        nlp_art = nlp_cap
 
     # --- Shared preprocessing (TF-IDF + Jaccard) ---
     print("Preprocessing captions ...")
-    cap_lemma, cap_sets = preprocess(captions, nlp, args.batch_size, "captions")
+    cap_lemma, cap_sets = preprocess(
+        captions, nlp_cap, args.batch_size, "captions", chunk_size=args.chunk_size)
     print("Preprocessing articles ...")
-    art_lemma, art_sets = preprocess(articles, nlp, args.batch_size, "articles")
+    art_lemma, art_sets = preprocess(
+        articles, nlp_art, args.batch_size, "articles", chunk_size=args.chunk_size)
 
     # --- Similarity scores ---
     print("Computing TF-IDF cosine similarity ...")
