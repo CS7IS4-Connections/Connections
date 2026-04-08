@@ -27,11 +27,17 @@ python src/preprocessing.py --dry-run --output data/samples/sample_dry.csv --dat
 # Preprocessing — full dataset (no sampling)
 python src/preprocessing.py --mode full --output data/processed/full.csv --data-dir articles/articles
 
-# Run full pipeline on the 90k sample (recommended entry point)
-python run_pipeline.py --input data/samples/sample_90k.csv --output results/sample_results.csv
+# Downsample 90k → 30k equally distributed (5000 per category)
+python src/downsample.py --input data/samples/sample_90k.csv --output data/samples/sample_30k.csv --n 5000
+
+# Downsample to a custom size (e.g. 15k — 2500 per category)
+python src/downsample.py --input data/samples/sample_90k.csv --output data/samples/sample_15k.csv --n 2500
+
+# Run full pipeline on the downsampled dataset (recommended entry point)
+python run_pipeline.py --input data/samples/sample_30k.csv --output results/sample_results.csv
 
 # Dry-run (first 500 rows) to verify pipeline before full run
-python run_pipeline.py --input data/samples/sample_90k.csv --output results/sample_results.csv --dry-run
+python run_pipeline.py --input data/samples/sample_30k.csv --output results/sample_results.csv --dry-run
 
 # Run individual pipeline stages independently
 python src/structural_features.py --input data/samples/sample_data_clean.csv --output results/structural.csv
