@@ -14,12 +14,15 @@ Metrics per row:
   entity_jaccard  — overall |E_cap ∩ E_art| / |E_cap ∪ E_art|
   entity_coverage — overall |E_cap ∩ E_art| / |E_art|
 
+Checkpointing: the script saves a partial output after every chunk so that
+a timed-out run can be resumed without losing progress.
+
 Usage:
-    pip install rapidfuzz
-    python -m spacy download en_core_web_trf
-    python src/entity_alignment.py \\
-        --input  results/similarity.csv \\
-        --output results/entity.csv
+    # Fresh run
+    python src/entity_alignment.py --input results/similarity.csv --output results/entity.csv
+
+    # Resume after a timeout (reads .partial checkpoint automatically)
+    python src/entity_alignment.py --input results/similarity.csv --output results/entity.csv --resume
 """
 
 from __future__ import annotations
@@ -31,8 +34,8 @@ import sys
 import pandas as pd
 from tqdm import tqdm
 
-ENTITY_TYPES     = ("PERSON", "GPE", "ORG", "DATE")
-FUZZY_THRESHOLD  = 0.85
+ENTITY_TYPES    = ("PERSON", "GPE", "ORG", "DATE")
+FUZZY_THRESHOLD = 0.85
 
 
 def _lev_sim(a: str, b: str) -> float:
@@ -74,8 +77,8 @@ def _compute_metrics(cap_ents: dict[str, list[str]], art_ents: dict[str, list[st
         n_art_total     += len(ae)
 
     union_size = n_cap_total + n_art_total - n_matched_total
-    row["entity_jaccard"]  = n_matched_total / union_size  if union_size > 0   else 0.0
-    row["entity_coverage"] = n_matched_total / n_art_total if n_art_total > 0  else 0.0
+    row["entity_jaccard"]  = n_matched_total / union_size  if union_size > 0  else 0.0
+    row["entity_coverage"] = n_matched_total / n_art_total if n_art_total > 0 else 0.0
     return row
 
 
@@ -90,6 +93,8 @@ def main() -> None:
     parser.add_argument("--chunk-size", type=int, default=500,
                         help="Rows per NER chunk to limit peak memory (default: 500)")
     parser.add_argument("--limit",      type=int, default=None)
+    parser.add_argument("--resume",     action="store_true",
+                        help="Resume from checkpoint if one exists for this output path")
     args = parser.parse_args()
 
     try:
@@ -109,32 +114,75 @@ def main() -> None:
     if args.limit:
         df = df.head(args.limit).copy()
 
-    captions = df["caption"].fillna("").astype(str).tolist()
-    articles = df["article_lead"].fillna("").astype(str).tolist()
+    # ── Checkpoint ─────────────────────────────────────────────────────────
+    checkpoint_path = args.output + ".partial"
+    done_df: pd.DataFrame | None = None
+    start_row = 0
 
-    all_rows: list[dict] = []
+    if args.resume and os.path.exists(checkpoint_path):
+        done_df   = pd.read_csv(checkpoint_path)
+        start_row = len(done_df)
+        print(f"Resuming from row {start_row:,} "
+              f"({start_row // args.chunk_size} chunks already done, "
+              f"{len(df) - start_row:,} remaining)")
+    elif args.resume:
+        print("--resume passed but no checkpoint found; starting from scratch.")
+
+    # Work only on the unprocessed tail of the dataframe
+    remaining_df = df.iloc[start_row:].reset_index(drop=True)
+    captions     = remaining_df["caption"].fillna("").astype(str).tolist()
+    articles     = remaining_df["article_lead"].fillna("").astype(str).tolist()
+
+    new_rows:  list[dict] = []
     chunk_size = args.chunk_size
-    n_chunks   = (len(df) + chunk_size - 1) // chunk_size
+    n_chunks   = (len(remaining_df) + chunk_size - 1) // chunk_size
 
     for chunk_idx in tqdm(range(n_chunks), desc="Entity alignment chunks"):
         start = chunk_idx * chunk_size
-        end   = min(start + chunk_size, len(df))
+        end   = min(start + chunk_size, len(remaining_df))
 
         cap_docs = list(nlp.pipe(captions[start:end], batch_size=args.batch_size))
         art_docs = list(nlp.pipe(articles[start:end], batch_size=args.batch_size))
 
-        all_rows.extend(
+        new_rows.extend(
             _compute_metrics(_ents_by_type(cd), _ents_by_type(ad))
             for cd, ad in zip(cap_docs, art_docs)
         )
-
-        # Free transformer doc memory before next chunk.
         del cap_docs, art_docs
 
-    out = pd.concat([df.reset_index(drop=True), pd.DataFrame(all_rows)], axis=1)
+        # ── Save checkpoint after every chunk ──────────────────────────────
+        processed_so_far = pd.concat(
+            [remaining_df.iloc[:len(new_rows)].reset_index(drop=True),
+             pd.DataFrame(new_rows)],
+            axis=1,
+        )
+        checkpoint_out = (
+            pd.concat([done_df, processed_so_far], ignore_index=True)
+            if done_df is not None
+            else processed_so_far
+        )
+        os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)), exist_ok=True)
+        checkpoint_out.to_csv(checkpoint_path, index=False)
+
+    # ── Combine done + new and write final output ───────────────────────────
+    new_out = pd.concat(
+        [remaining_df.reset_index(drop=True), pd.DataFrame(new_rows)],
+        axis=1,
+    )
+    out = (
+        pd.concat([done_df, new_out], ignore_index=True)
+        if done_df is not None
+        else new_out
+    )
+
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     out.to_csv(args.output, index=False)
     print(f"Wrote {len(out):,} rows -> {args.output}")
+
+    # Clean up checkpoint once final output is written
+    if os.path.exists(checkpoint_path):
+        os.remove(checkpoint_path)
+        print(f"Checkpoint removed: {checkpoint_path}")
 
 
 if __name__ == "__main__":
