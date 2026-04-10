@@ -119,6 +119,16 @@ def _kruskal_eta2(groups: list[np.ndarray]) -> tuple[float, float, float]:
     return H, p, eta2
 
 
+CATEGORY_SHORT = {
+    "business_economy":      "Business",
+    "entertainment_culture": "Entertain.",
+    "politics_government":   "Politics",
+    "science_technology":    "Science",
+    "sport":                 "Sport",
+    "world_society":         "World",
+}
+
+
 def _three_panel_boxplot(
     df: pd.DataFrame,
     group_col: str,
@@ -127,23 +137,32 @@ def _three_panel_boxplot(
     saved: list[str],
     rotate_x: int = 0,
 ) -> None:
+    plot_df = df.copy()
+    if group_col == "category":
+        plot_df[group_col] = plot_df[group_col].map(
+            lambda v: CATEGORY_SHORT.get(v, v)
+        )
+        order = [CATEGORY_SHORT.get(v, v) for v in sorted(df[group_col].dropna().unique())]
+    else:
+        order = sorted(plot_df[group_col].dropna().unique())
+
     fig, axes = plt.subplots(1, 3, figsize=(7, 3.5), sharey=False)
-    order = sorted(df[group_col].dropna().unique())
     for ax, sim in zip(axes, SIM_COLS):
         sns.boxplot(
-            x=group_col, y=sim, data=df, order=order,
+            x=group_col, y=sim, data=plot_df, order=order,
             palette=PALETTE, ax=ax,
             flierprops={"marker": ".", "markersize": 2, "alpha": 0.3},
             linewidth=0.8,
         )
         sns.stripplot(
-            x=group_col, y=sim, data=df, order=order,
+            x=group_col, y=sim, data=plot_df, order=order,
             ax=ax, alpha=0.3, size=2, color="0.4", jitter=True,
         )
-        ax.set_xlabel(group_col.replace("_", " "), fontsize=FONT_LABEL)
+        ax.set_xlabel("")
         ax.set_ylabel(SIM_LABELS[sim] + " similarity", fontsize=FONT_LABEL)
-        if rotate_x:
-            ax.tick_params(axis="x", rotation=rotate_x)
+        ax.tick_params(axis="x", rotation=45, labelsize=FONT_TICK)
+        for lbl in ax.get_xticklabels():
+            lbl.set_ha("right")
     fig.tight_layout()
     _save_png(fig, fname, outdir, saved)
 
@@ -263,15 +282,18 @@ def fig_rq1_heatmap(corr_df: pd.DataFrame, outdir: str, saved: list[str]) -> Non
 def fig_rq1_top_scatter(
     df: pd.DataFrame, corr_df: pd.DataFrame, outdir: str, saved: list[str]
 ) -> None:
-    candidates = []
-    for _, row in corr_df.iterrows():
-        for sim in SIM_COLS:
+    # Pick the single best feature (highest |r|) per similarity metric
+    top = []
+    for sim in SIM_COLS:
+        best = None
+        for _, row in corr_df.iterrows():
             r = row[f"r_{sim}"]
             p = row[f"p_{sim}"]
             if not np.isnan(r) and not np.isnan(p) and p < 0.05:
-                candidates.append((abs(r), row["feature"], sim, r))
-    candidates.sort(reverse=True)
-    top = candidates[:3]
+                if best is None or abs(r) > abs(best[0]):
+                    best = (r, row["feature"], sim, r)
+        if best is not None:
+            top.append(best)
 
     if not top:
         print("  [RQ1] No significant correlations found; skipping top scatter.")
@@ -472,18 +494,19 @@ def table_rq5_dunn(df: pd.DataFrame, outdir: str) -> None:
 
 def table_dataset_stats(df: pd.DataFrame, outdir: str) -> None:
     rows = []
+    has_entity_col = all(c in df.columns for c in OVERLAP_COLS) and "entity_jaccard" in df.columns
     for src in sorted(df["source"].dropna().unique()):
         sub = df[df["source"] == src]
-        has_entity = (
-            (sub[OVERLAP_COLS] > 0).any(axis=1) | (sub["entity_jaccard"] > 0)
-        )
-        rows.append({
-            "source":                  src,
-            "rows":                    len(sub),
-            "avg caption words":       f"{sub['word_count'].mean():.1f}",
-            "avg article words":       f"{sub['article_lead'].dropna().str.split().str.len().mean():.1f}",
-            "% with entity overlap":   f"{has_entity.mean() * 100:.1f}",
-        })
+        row = {
+            "source":            src,
+            "rows":              len(sub),
+            "avg caption words": f"{sub['word_count'].mean():.1f}",
+            "avg article words": f"{sub['article_lead'].dropna().str.split().str.len().mean():.1f}",
+        }
+        if has_entity_col:
+            has_entity = (sub[OVERLAP_COLS] > 0).any(axis=1) | (sub["entity_jaccard"] > 0)
+            row["% with entity overlap"] = f"{has_entity.mean() * 100:.1f}"
+        rows.append(row)
     _save_table(pd.DataFrame(rows), "table_dataset_stats", outdir)
 
 
@@ -533,13 +556,16 @@ def _print_hypothesis_assessment(df: pd.DataFrame, corr_df: pd.DataFrame) -> Non
         print("  H2: caption_type not yet classified — cannot assess H2")
 
     # H3: entity type overlap comparison
-    overlap_means = {etype: df[col].mean() for etype, col in zip(ENTITY_TYPES, OVERLAP_COLS)}
-    ranked = sorted(overlap_means.items(), key=lambda x: x[1], reverse=True)
-    top_type, top_val = ranked[0]
-    bot_type, bot_val = ranked[-1]
-    print(f"  H3: {top_type} overlap (mean={top_val:.3f}) > "
-          f"{bot_type} overlap (mean={bot_val:.3f}) — "
-          f"{'consistent' if top_val > bot_val else 'not consistent'} with H3")
+    if all(c in df.columns for c in OVERLAP_COLS):
+        overlap_means = {etype: df[col].mean() for etype, col in zip(ENTITY_TYPES, OVERLAP_COLS)}
+        ranked = sorted(overlap_means.items(), key=lambda x: x[1], reverse=True)
+        top_type, top_val = ranked[0]
+        bot_type, bot_val = ranked[-1]
+        print(f"  H3: {top_type} overlap (mean={top_val:.3f}) > "
+              f"{bot_type} overlap (mean={bot_val:.3f}) — "
+              f"{'consistent' if top_val > bot_val else 'not consistent'} with H3")
+    else:
+        print("  H3: entity alignment columns not available — cannot assess H3")
 
     # H4: category affects similarity
     groups = df["category"].dropna().unique()
@@ -566,8 +592,6 @@ def _print_hypothesis_assessment(df: pd.DataFrame, corr_df: pd.DataFrame) -> Non
 REQUIRED_COLS = (
     ["item_id", "source", "category", "caption", "article_lead", "word_count"]
     + SIM_COLS
-    + OVERLAP_COLS
-    + ["entity_jaccard", "entity_coverage", "caption_type"]
 )
 
 
@@ -611,12 +635,16 @@ def main() -> None:
         fig_rq2(df, args.output, saved)
         table_rq2(df, args.output)
     else:
-        print("\nWARNING: caption_type is all 'unclassified'; skipping RQ2 figures.")
+        print("\nINFO: caption_type not available; skipping RQ2 figures.")
 
     # --- RQ3 ---
-    fig_rq3_entity_bar(df, args.output, saved)
-    fig_rq3_entity_scatter(df, args.output, saved)
-    table_rq3(df, args.output)
+    has_entity = all(c in df.columns for c in OVERLAP_COLS) and "entity_jaccard" in df.columns
+    if has_entity:
+        fig_rq3_entity_bar(df, args.output, saved)
+        fig_rq3_entity_scatter(df, args.output, saved)
+        table_rq3(df, args.output)
+    else:
+        print("\nINFO: Entity alignment columns not available; skipping RQ3 figures.")
 
     # --- RQ4 ---
     fig_rq4(df, args.output, saved)
@@ -624,7 +652,8 @@ def main() -> None:
 
     # --- RQ5 ---
     fig_rq5_by_source(df, args.output, saved)
-    fig_rq5_entity_bar(df, args.output, saved)
+    if has_entity:
+        fig_rq5_entity_bar(df, args.output, saved)
     table_rq5(df, args.output)
     table_rq5_dunn(df, args.output)
 

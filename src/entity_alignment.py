@@ -13,6 +13,10 @@ Metrics per row:
   date_overlap    — same for DATE
   entity_jaccard  — overall |E_cap ∩ E_art| / |E_cap ∪ E_art|
   entity_coverage — overall |E_cap ∩ E_art| / |E_art|
+  person_count_caption, gpe_count_caption, org_count_caption, date_count_caption
+                  — raw entity counts per type in the caption
+  total_entities_caption — total entity mentions in caption (all 4 types)
+  total_entities_article — total entity mentions in article (all 4 types)
 
 Checkpointing: the script saves a partial output after every chunk so that
 a timed-out run can be resumed without losing progress.
@@ -71,14 +75,17 @@ def _compute_metrics(cap_ents: dict[str, list[str]], art_ents: dict[str, list[st
         n_matched = sum(1 for e in ce if _has_match(e, ae))
 
         row[f"{etype.lower()}_overlap"] = n_matched / len(ce) if ce else 0.0
+        row[f"{etype.lower()}_count_caption"] = len(ce)
 
         n_matched_total += n_matched
         n_cap_total     += len(ce)
         n_art_total     += len(ae)
 
     union_size = n_cap_total + n_art_total - n_matched_total
-    row["entity_jaccard"]  = n_matched_total / union_size  if union_size > 0  else 0.0
-    row["entity_coverage"] = n_matched_total / n_art_total if n_art_total > 0 else 0.0
+    row["entity_jaccard"]        = n_matched_total / union_size  if union_size > 0  else 0.0
+    row["entity_coverage"]       = n_matched_total / n_art_total if n_art_total > 0 else 0.0
+    row["total_entities_caption"] = n_cap_total
+    row["total_entities_article"] = n_art_total
     return row
 
 

@@ -1,6 +1,0 @@
-entity type,mean overlap,mean coverage,mean jaccard
-PERSON,0.390,—,—
-GPE,0.228,—,—
-ORG,0.184,—,—
-DATE,0.120,—,—
-Overall,0.230,0.041,0.041

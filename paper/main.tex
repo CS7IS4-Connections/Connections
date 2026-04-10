@@ -68,18 +68,10 @@ types. (H4) Similarity differs across news categories. (H5) UK outlets
 \section{Data and Method}
 
 \subsection{Dataset}
-We draw 2,520 caption--article pairs from VisualNews \citep{liu2020visualnews},
-covering four outlets (Guardian, BBC, Washington Post, USA Today) and six topic
-categories. Table~\ref{tab:dataset} shows the distribution.
-
-\begin{table}[h]
-  \centering
-  \caption{Dataset statistics per source.}
-  \label{tab:dataset}
-  \small
-  \adjustbox{max width=\linewidth}{%
-    \input{../results/figures/table_dataset_stats}}
-\end{table}
+We draw 30,000 caption--article pairs from VisualNews \citep{liu2020visualnews}
+(stratified sample: 5,000 per category), covering Guardian and BBC News across
+six topic categories. Full descriptive statistics are reported in
+Table~\ref{tab:desc} in the Results section.
 
 \subsection{Similarity Metrics}
 All text is preprocessed with spaCy \texttt{en\_core\_web\_trf}:
@@ -112,181 +104,196 @@ Dunn post-hoc with Bonferroni correction for pairwise source comparisons.
 % ============================================================
 \section{Results}
 
-\subsection{Score Distributions}
+\subsection{Descriptive Overview}
 
-Figure~\ref{fig:sim_dist} shows the three similarity distributions.
-$s_{sbert}$ is right-shifted relative to $s_{tf}$ and $s_{jac}$, reflecting
-its sensitivity to paraphrase rather than surface overlap.
-Caption word counts are right-skewed with a median of $\approx 20$ words
-(Figure~\ref{fig:cap_len}).
+The 30,000-pair corpus comprises 23,013 Guardian and 6,987 BBC articles.
+Table~\ref{tab:desc} summarises per-source descriptive statistics for all
+three similarity measures and caption word count.
+
+Figure~\ref{fig:sim_dist} shows the similarity distributions as kernel
+density estimates. $s_{sbert}$ is substantially right-shifted
+(median~=~0.49) relative to $s_{tf}$ (median~=~0.20) and $s_{jac}$
+(median~=~0.04), reflecting SBERT's sensitivity to paraphrase rather than
+surface vocabulary overlap. Figure~\ref{fig:scatter_matrix} confirms that
+the three metrics are only moderately inter-correlated, justifying their
+complementary use.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{similarity_score_distributions.png}
-  \caption{Distributions of TF-IDF, Jaccard, and SBERT similarity.
-           Solid = mean; dashed = median.}
+  \includegraphics[width=\linewidth]{fig01_similarity_distributions.png}
+  \caption{KDE of TF-IDF cosine, Jaccard, and SBERT similarity scores.
+           Dashed lines mark per-measure medians.}
   \label{fig:sim_dist}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.75\linewidth]{caption_length_distribution.png}
-  \caption{Caption word-count distribution (median annotated).}
-  \label{fig:cap_len}
+  \includegraphics[width=\linewidth]{fig02_scatter_matrix.png}
+  \caption{Pairwise similarity measure correlations (hexbin, $n=10{,}000$
+           random sample). Pearson $r$ annotated per panel.}
+  \label{fig:scatter_matrix}
 \end{figure}
+
+\begin{table}[h]
+  \centering
+  \caption{Descriptive statistics by source (mean / median / SD).}
+  \label{tab:desc}
+  \small
+  \adjustbox{max width=\linewidth}{%
+    \input{../results/figures/table1_descriptive_stats}}
+\end{table}
 
 % -------------------------------------------------------
 \subsection{RQ1: Structural Features and Similarity}
 
-Figure~\ref{fig:rq1_heat} shows Pearson $r$ between all structural features
-and the three metrics (cells marked~* have $p < 0.05$).
-Figure~\ref{fig:rq1_scatter} plots the three strongest significant
-correlations with regression lines. Full values are in Table~\ref{tab:rq1}.
+Figure~\ref{fig:struct_heat} shows Pearson $r$ for each structural feature
+against the three similarity metrics; non-significant cells ($p > 0.05$) are
+marked \textit{ns}. Figure~\ref{fig:reg_coefs} shows standardised OLS
+coefficients ($\beta$) for SBERT as the outcome.
 
-\textit{[Interpret: which features correlate, direction, magnitude.
-Support or refute H1.]}
+All features show at least one significant correlation, confirming H1.
+The effects differ substantially by metric.
+
+\textbf{POS overlap features} are the strongest and most consistent
+predictors. Proper-noun overlap has the largest standardised coefficient
+($\hat{\beta} = 0.28$, $p < 0.001$), followed by noun overlap
+($\hat{\beta} = 0.19$). These features correlate significantly with all
+three metrics ($r_{sbert} = 0.33$ and $0.29$ respectively), indicating
+that captions sharing named referents with their article are more aligned
+across all dimensions of similarity.
+
+\textbf{Syntactic complexity} also predicts SBERT: average sentence length
+($\hat{\beta} = 0.09$) and dependency depth ($\hat{\beta} = 0.08$) both
+reach significance, suggesting that structurally richer captions tend to
+mirror the article more closely at the semantic level.
+
+\textbf{Caption length features} (word count, token count, character count)
+correlate strongly with Jaccard ($r \approx 0.57$) but weakly with SBERT
+($r \approx 0.08$), a well-known length bias in set-overlap metrics. Jaccard
+values should therefore be interpreted with caption length in mind.
+
+\textbf{Type--token ratio} (TTR) is negatively associated with all three
+metrics ($r_{jac} = -0.34$, $\hat{\beta} = -0.02$), consistent with
+lexically diverse captions introducing framing not present in the article.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.72\linewidth]{rq1_correlation_heatmap.png}
-  \caption{Pearson $r$ heatmap: structural features vs.\ similarity metrics.
-           * $p < 0.05$.}
-  \label{fig:rq1_heat}
+  \includegraphics[width=0.72\linewidth]{fig03_structural_correlations.png}
+  \caption{Pearson $r$ between structural caption features and similarity
+           metrics. Significant cells annotated with $r$ and significance
+           stars; \textit{ns} = $p > 0.05$.}
+  \label{fig:struct_heat}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{rq1_top_scatter.png}
-  \caption{Top three significant feature--similarity correlations (95\% CI).}
-  \label{fig:rq1_scatter}
+  \includegraphics[width=0.82\linewidth]{fig04_regression_coefs.png}
+  \caption{Standardised OLS coefficients ($\beta$) predicting SBERT
+           similarity from structural features. Error bars = 95\% CI;
+           * labels indicate $p < 0.05$.}
+  \label{fig:reg_coefs}
 \end{figure}
-
-\begin{table}[h]
-  \centering
-  \caption{Pearson $r$ and $p$-values, sorted by $|r_{sbert}|$.
-           * $p < 0.05$.}
-  \label{tab:rq1}
-  \small
-  \adjustbox{max width=\linewidth}{%
-    \input{../results/figures/table_rq1_correlations}}
-\end{table}
 
 % -------------------------------------------------------
-\subsection{RQ2: Caption Function}
+\subsection{RQ2: Caption Function and Similarity}
 
-Caption type classification is not yet finalised
-(\texttt{src/caption\_classifier.py} returns \textit{unclassified}
-for all rows). RQ2 and H2 will be evaluated once the rule-based
-classifier is implemented.
+Caption type classification (Extractive / Descriptive / Expansive /
+Independent) is pending the full 30k pipeline run.
+RQ2 and H2 will be evaluated once
+\texttt{src/caption\_classifier.py} results are available.
 
 % -------------------------------------------------------
 \subsection{RQ3: Named-Entity Alignment}
 
-Figure~\ref{fig:rq3_bar} shows mean overlap rate per entity type.
-Figure~\ref{fig:rq3_scatter} tests whether entity overlap predicts
-semantic similarity. Table~\ref{tab:rq3} reports all entity metrics.
-
-\textit{[Interpret: which entity type shows highest overlap. Whether
-PERSON $>$ ORG/DATE (H3). Whether entity\_jaccard correlates with
-sbert\_sim.]}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.82\linewidth]{rq3_entity_overlap_by_type.png}
-  \caption{Mean entity overlap rate per type (error bars: 95\% CI).}
-  \label{fig:rq3_bar}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.82\linewidth]{rq3_entity_jaccard_vs_sbert.png}
-  \caption{Entity Jaccard vs.\ SBERT similarity, coloured by source.}
-  \label{fig:rq3_scatter}
-\end{figure}
-
-\begin{table}[h]
-  \centering
-  \caption{Mean entity alignment metrics. Per-type coverage not available
-           from pipeline output; shown for Overall row only.}
-  \label{tab:rq3}
-  \small
-  \adjustbox{max width=\linewidth}{%
-    \input{../results/figures/table_rq3_entity_metrics}}
-\end{table}
+Entity alignment columns are pending the full 30k pipeline run.
+RQ3 and H3 will be evaluated once
+\texttt{src/entity\_alignment.py} results are available.
 
 % -------------------------------------------------------
 \subsection{RQ4: News Category}
 
-Figure~\ref{fig:rq4} shows similarity distributions across the six topic
-categories. Table~\ref{tab:rq4} reports means, SDs, and Kruskal--Wallis
-results.
+Figures~\ref{fig:cat_bar} and \ref{fig:cat_box}, and Table~\ref{tab:kw},
+show how similarity varies across the six topic categories.
 
-For RQ4 (News Category Effects), the findings indicate that caption--article similarity varies across news categories, although this variation is not manifested in the same way at the levels of semantic similarity and lexical overlap. In accordance with the methodological framework of this study, we categorized the news data into six distinct groups: politics\_government, sport, business\_economy, science\_technology, entertainment\_culture, and world\_society. We used SBERT to examine semantic similarity and Jaccard similarity to examine lexical overlap. The clearest differences appeared in semantic similarity. Measured by SBERT, business\_economy had the highest mean score (0.5011), followed by sport (0.4928) and politics\_government (0.4814), whereas entertainment\_culture showed comparatively weaker semantic alignment (0.4427). By contrast, lexical overlap followed a somewhat different pattern: sport had the highest mean Jaccard similarity (0.0552), while business\_economy and science\_technology showed comparatively lower Jaccard values. This suggests that news category affects not only the overall degree of alignment between captions and articles, but also that this effect is expressed differently at the lexical and semantic levels.
+Differences are statistically significant for all three metrics
+($p < 0.001$ in every case), though effect sizes are modest
+($\eta^2 = 0.004$ for TF-IDF; $\eta^2 = 0.022$ for Jaccard;
+$\eta^2 = 0.028$ for SBERT). The pattern differs across metrics.
+\textbf{Sport} (median SBERT~=~0.52) and \textbf{business and economy}
+(0.52) show the strongest semantic alignment, while
+\textbf{entertainment and culture} (0.42) shows the weakest. Dunn
+post-hoc tests (Bonferroni corrected) confirm that entertainment
+differs significantly from every other category ($p < 0.001$), and that
+sport and business differ from politics ($p < 0.01$).
 
-These findings can also be interpreted through the framework of hard news, soft news, and general news proposed by \cite{LehmanWilzig2010}. Within the six categories used in this study, politics\_government and business\_economy can be more clearly classified as hard news, as they typically place greater emphasis on timeliness, factual density, and the importance of the event itself. entertainment\_culture is closer to soft news, as it is generally characterized by lower urgency and lower information density. science\_technology and world\_society are better understood as broader general categories. Although sport does not map perfectly onto traditional hard news, its strongly event-driven character and relatively high information density mean that, within the interpretive framework of this study, it can be treated as relatively hard-news-leaning.
-
-From this perspective, categories such as business_economy and sport, which are more event-driven and characterized by higher factual density, tend to show stronger semantic alignment between captions and articles. By contrast, entertainment_culture, which is associated with lower urgency, lower factual density, and more specific audience targeting, shows weaker semantic alignment. The results at the level of lexical overlap also suggest that different categories differ in how captions and articles are phrased. For example, sport shows the highest Jaccard similarity, indicating that sports captions tend to repeat key vocabulary and event descriptions from the article more directly. By contrast, business_economy shows relatively high SBERT similarity but lower Jaccard similarity, suggesting that captions in this category may remain closely related to the article at the semantic level without relying on obvious surface-level lexical repetition.
-
-Overall, these findings show that news domain affects how closely captions align with article content. Categories more closely associated with hard news tend to show stronger caption--article coherence, although this coherence is not always expressed equally at the semantic and lexical levels. By contrast, categories more closely associated with soft news or general news show relatively weaker alignment. Therefore, H4 -- namely, that caption--article similarity varies across news categories -- was supported.
+These results align with the hard/soft news framework
+\citep{LehmanWilzig2010}: event-driven, factually dense categories
+(sport, business, politics) show stronger caption--article coherence,
+while entertainment---closer to soft news in urgency and audience
+orientation---shows the weakest alignment. The modest $\eta^2$ values
+suggest journalistic format conventions constrain similarity regardless
+of topic, limiting the practical magnitude of category-driven differences.
+H4 is supported.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{rq4_similarity_by_category.png}
-  \caption{Similarity by news category.}
-  \label{fig:rq4}
+  \includegraphics[width=\linewidth]{fig11_similarity_by_category.png}
+  \caption{Median similarity by news category (horizontal grouped bars,
+           sorted by SBERT median descending).}
+  \label{fig:cat_bar}
 \end{figure}
 
-\begin{table}[h]
+\begin{figure}[h]
   \centering
-  \caption{Mean $\pm$ SD similarity by category. KW = Kruskal--Wallis.}
-  \label{tab:rq4}
-  \small
-  \adjustbox{max width=\linewidth}{%
-    \input{../results/figures/table_rq4_similarity_by_category}}
-\end{table}
+  \includegraphics[width=\linewidth]{fig12_sbert_by_category.png}
+  \caption{SBERT similarity distributions by category (boxplot).
+           Significance brackets show Dunn post-hoc pairs with
+           Bonferroni-corrected $p < 0.05$.}
+  \label{fig:cat_box}
+\end{figure}
 
 % -------------------------------------------------------
-\subsection{RQ5: Cross-Source}
+\subsection{RQ5: Cross-Source Variation}
 
-Figure~\ref{fig:rq5_sim} shows per-source similarity distributions.
-Figure~\ref{fig:rq5_ent} shows mean entity Jaccard per source.
-Table~\ref{tab:rq5} gives means and Kruskal--Wallis results;
-Table~\ref{tab:rq5_dunn} gives Bonferroni-corrected pairwise $p$-values.
+The present corpus contains only two sources (BBC and Guardian), both
+British, so H5's UK-vs-US comparison cannot be directly tested.
+Figure~\ref{fig:src_bar} and Table~\ref{tab:kw} compare them.
 
-\textit{[Interpret: UK vs US difference. Which source has highest/lowest
-alignment. Support or refute H5.]}
+Guardian captions score higher than BBC across all three metrics:
+TF-IDF (0.217 vs.\ 0.179; $H = 538.2$, $p < 0.001$, $\eta^2 = 0.018$),
+Jaccard (0.051 vs.\ 0.039; $H = 420.8$, $p < 0.001$, $\eta^2 = 0.014$),
+and SBERT (0.476 vs.\ 0.458; $H = 66.0$, $p < 0.001$, $\eta^2 = 0.002$).
+The lexical gap (TF-IDF, Jaccard) is partly a caption-length artefact:
+Guardian captions average 18.5 words vs.\ BBC's 13.0, and length is a
+strong Jaccard predictor ($r = 0.57$, RQ1). The near-zero SBERT $\eta^2$
+indicates semantic alignment is essentially equivalent across the two
+outlets once length differences are set aside. Figure~\ref{fig:src_heat}
+further shows that this pattern holds across categories.
+H5 cannot be fully assessed with only UK sources, but there is no evidence
+of meaningful semantic alignment differences between outlets.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{rq5_similarity_by_source.png}
-  \caption{Similarity distributions by source.}
-  \label{fig:rq5_sim}
+  \includegraphics[width=\linewidth]{fig13_similarity_by_source.png}
+  \caption{Mean similarity by news source (grouped bars, 95\% CI).}
+  \label{fig:src_bar}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.82\linewidth]{rq5_entity_jaccard_by_source.png}
-  \caption{Mean entity Jaccard per source (95\% CI).}
-  \label{fig:rq5_ent}
+  \includegraphics[width=\linewidth]{fig15_source_category_heatmap.png}
+  \caption{Median SBERT similarity by source and news category.}
+  \label{fig:src_heat}
 \end{figure}
 
 \begin{table}[h]
   \centering
-  \caption{Mean $\pm$ SD similarity by source. KW = Kruskal--Wallis.}
-  \label{tab:rq5}
+  \caption{Kruskal--Wallis tests for category and source effects across
+           all three similarity metrics.}
+  \label{tab:kw}
   \small
   \adjustbox{max width=\linewidth}{%
-    \input{../results/figures/table_rq5_similarity_by_source}}
-\end{table}
-
-\begin{table}[h]
-  \centering
-  \caption{Dunn post-hoc pairwise $p$-values for SBERT similarity
-           by source (Bonferroni corrected).}
-  \label{tab:rq5_dunn}
-  \small
-  \adjustbox{max width=\linewidth}{%
-    \input{../results/figures/table_rq5_dunn_posthoc}}
+    \input{../results/figures/table2_statistical_tests}}
 \end{table}
 
 % ============================================================
