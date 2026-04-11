@@ -1,122 +1,543 @@
 % ============================================================
-% Caption-Article Textual Similarity — VisualNews
-% Overleaf: set compile root to paper/main.tex
+% Connections: How News Captions Relate to Their Articles
+% Final submission draft
 % Compile: pdflatex -> bibtex -> pdflatex -> pdflatex
 % ============================================================
 \documentclass[11pt,a4paper]{article}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{times}
+\usepackage{natbib}
+\usepackage[margin=25mm]{geometry}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
 \usepackage{amsmath}
 \usepackage{booktabs}
-\usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{adjustbox}
 \usepackage{multirow}
-\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
-\usepackage[numbers,sort&compress]{natbib}
+\usepackage{array}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
 \graphicspath{{../results/figures/}}
 \setlength{\parskip}{4pt}
 
-\title{\textbf{What Do Captions Actually Say?\\
-Textual Similarity Between News Captions and Articles}}
-
-\author{
-  Author One \and Author Two \and Author Three\\
-  School of Computer Science and Statistics, Trinity College Dublin
-}
+\title{\textbf{Connections: How News Captions Relate to Their Articles}}
 \date{}
 
+\author{
+  Stevin Joseph Sebastian\\
+  Trinity College Dublin\\
+  \texttt{stevinjs@tcd.ie}
+  \and
+  Navina Ganapathy Amuthan\\
+  Trinity College Dublin\\
+  \texttt{ganapatn@tcd.ie}
+  \and
+  Jayananden Meenakchisundaram\\
+  Trinity College Dublin\\
+  \texttt{meenakcj@tcd.ie}
+  \and
+  Yanyi Ren\\
+  Trinity College Dublin\\
+  \texttt{reny3@tcd.ie}
+  \and
+  Bhavanam Vijayabhaskar Reddy\\
+  Trinity College Dublin\\
+  \texttt{reddybh@tcd.ie}
+}
+
 \begin{document}
+
 \maketitle
 
 % ============================================================
 \begin{abstract}
-News image captions are expected to reflect the events described in their
-accompanying articles, yet the degree of that alignment varies widely.
-We quantify caption--article textual similarity across 2,520 pairs from the
-VisualNews dataset \citep{liu2020visualnews} using three complementary metrics
-(TF-IDF cosine, lemma-set Jaccard, and SBERT semantic similarity), and examine
-how alignment relates to structural caption properties, named-entity overlap,
-news category, and publication source.
-Our results show that \ldots [fill in after final run].
+
+News image captions serve as a critical bridge between visual and textual
+content, yet the textual relationship between captions and their parent
+articles remains underexplored. We present a multi-dimensional empirical
+analysis of caption--article textual similarity across 30,000 pairs drawn
+from the VisualNews dataset \citep{liu2021visualnews}, covering the Guardian
+and BBC News across six topic categories. Three complementary similarity
+metrics are employed: TF-IDF cosine similarity, lemma-set Jaccard
+similarity, and SBERT semantic similarity \citep{Reimers2019}. We extract
+structural caption features, develop and apply a novel functional caption
+typology (Extractive, Descriptive, Expansive, Independent) grounded in
+\citet{marsh2003taxonomy}, perform named entity alignment analysis, and
+conduct comparative analyses across news categories and publication sources.
+Caption function emerges as the strongest predictor of similarity: extractive
+captions (37.3\% of the corpus) achieve a mean SBERT similarity of 0.574,
+nearly 0.17 points above independent captions ($\eta^2 = 0.194$). Among
+structural predictors, proper-noun overlap dominates ($\hat{\beta} = 0.170$,
+together with entity Jaccard $\hat{\beta} = 0.133$), reflecting the central
+role of shared named referents. Category effects are significant but modest
+($\eta^2 = 0.028$): sport and business show the highest caption--article
+coherence; entertainment shows the weakest, consistent with the hard/soft
+news distinction. Source differences in surface metrics are largely a
+caption-length artefact, with negligible semantic differences between outlets.
+All five hypotheses are supported.
+
 \end{abstract}
+
+\noindent\textbf{Keywords:} Text Similarity, News Image Captioning,
+Caption--Article Similarity, Named Entity Recognition, VisualNews,
+Caption Typology, Multimodal News Analysis
 
 % ============================================================
 \section{Introduction}
 
-A news caption and its article describe the same event, but from very
-different vantage points: an article runs to hundreds of words; a caption
-to roughly twenty.
-Understanding how much article content a caption captures matters for
-automatic caption generation, misinformation detection, and multimodal
-summarisation.
+In modern news media, image captions do far more than describe photographs.
+They summarise events, add context, and sometimes introduce information
+absent from the article itself. Most existing research has focused on
+automatic caption \textit{generation} --- training models to produce captions
+from images and article text --- rather than analysing the textual
+relationship between human-written captions and their source articles. This
+leaves a significant gap: we know relatively little about how captions relate
+linguistically to the articles they accompany, or how this relationship varies
+across news topics and publishers.
 
-We ask five questions: (RQ1) Do structural caption features predict
-similarity? (RQ2) Does caption function affect alignment? (RQ3) Do named
-entities provide a reliable alignment signal? (RQ4) Does similarity vary
-by news category? (RQ5) Do UK and US outlets differ in caption--article
-alignment?
+This gap matters on two fronts. From a journalism perspective, understanding
+caption--article similarity can reveal editorial conventions and inform best
+practices in news writing. From a computational standpoint, characterising
+this relationship supports downstream tasks such as misinformation detection,
+multimodal retrieval, and automated captioning quality assessment. This study
+addresses the gap systematically by measuring caption--article textual
+similarity across multiple dimensions: lexical, semantic, structural, and
+entity-based.
 
-Corresponding hypotheses: (H1) Structural features correlate significantly
-with at least one similarity metric. (H2) Caption type significantly
-predicts similarity. (H3) PERSON entity overlap is highest among entity
-types. (H4) Similarity differs across news categories. (H5) UK outlets
-(Guardian, BBC) show higher alignment than US outlets (WaPo, USA Today).
+We used the VisualNews dataset \citep{liu2021visualnews}, which contains over
+1.2 million news items from four major English-language news organisations
+(The Guardian, BBC, Washington Post, and USA Today). Our analysis is conducted
+on a 30,000-pair stratified sample drawn from the Guardian and BBC, covering
+six topic categories. We quantify caption--article similarity using three
+complementary measures, extract structural features that predict similarity,
+develop a functional typology classifying captions by their rhetorical
+relationship to the article, analyse named entity alignment as an indicator
+of semantic coherence, and investigate how these patterns differ across news
+categories and sources.
+
+\subsection{Research Questions}
+
+\noindent\textbf{Main Research Question:} What are the key factors that
+explain the degree of textual (dis)similarity between news image captions
+and their corresponding article texts, across news sources and domains?
+
+\begin{enumerate}
+
+\item \textbf{RQ1 (Structural Features)}\\
+How do structural properties of captions relate to their degree of
+textual similarity with the corresponding article?
+
+\item \textbf{RQ2 (Functional Classification)}\\
+Can captions be classified into functional types, and do these types show
+different similarity profiles?
+
+\item \textbf{RQ3 (Named Entity Alignment)}\\
+Which named entity types are most and least preserved between caption and
+article, and does entity overlap predict overall semantic similarity?
+
+\item \textbf{RQ4 (News Category Effects)}\\
+Does caption--article similarity vary across news domains?
+
+\item \textbf{RQ5 (Cross-Source Variation)}\\
+Do similarity patterns hold uniformly across news sources?
+
+\end{enumerate}
+
+\subsection{Hypotheses}
+
+Table~\ref{tab:hypotheses} states the directional hypothesis, statistical
+test, and minimum threshold for confirmation for each research question.
+Falsification conditions are stated alongside each hypothesis.
+
+\begin{table}[h]
+\centering
+\caption{Research hypotheses, tests, and falsification thresholds.}
+\label{tab:hypotheses}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{@{}lp{5.5cm}p{3.2cm}p{3.2cm}@{}}
+\toprule
+\textbf{RQ} & \textbf{Hypothesis} & \textbf{Test} & \textbf{Falsification}\\
+\midrule
+H1 & Structural caption features show significant correlation with at least
+     one similarity measure ($|r| > 0.10$, $p < 0.05$).
+   & Pearson $r$, $\alpha = 0.05$
+   & No feature reaches $|r| > 0.10$ on any metric after Bonferroni correction.\\
+\addlinespace
+H2 & Caption function significantly predicts similarity; Extractive captions
+     show the highest alignment.
+   & Kruskal--Wallis $+$ Dunn, $\alpha = 0.05$
+   & No significant group difference ($p > 0.05$), or $\eta^2 < 0.05$.\\
+\addlinespace
+H3 & PERSON entities show higher caption--article overlap rates than ORG,
+     GPE, or DATE.
+   & Conditional mean comparison
+   & PERSON mean overlap not highest among the four entity types.\\
+\addlinespace
+H4 & Caption--article similarity differs significantly across news categories,
+     with event-driven categories (sport, business) showing higher coherence.
+   & Kruskal--Wallis $+$ Dunn, $\alpha = 0.001$
+   & No significant category difference ($p > 0.05$), or $\eta^2 < 0.01$.\\
+\addlinespace
+H5 & Similarity patterns differ significantly across publication sources.
+   & Kruskal--Wallis $+$ Dunn, $\alpha = 0.05$
+   & No significant pairwise source difference after Bonferroni correction.\\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+% ============================================================
+\section{Related Work}
+
+COSMOROE is a corpus-based framework for classifying semantic interrelations
+between images, language and body movements, validated on a corpus of TV
+travel programmes. \cite{pastra2008} is one of the earliest theoretically
+grounded attempts to systematically categorize cross-modal relationships,
+making it a useful foundation for caption typology for functional
+classification into distinct types like descriptive, expansive, independent or
+extractive. However, its domain is audiovisual broadcast media and it offers
+no textual similarity metrics or caption-specific functional categories. It
+provides theoretical evidence but requires substantial adaptation for a
+text-to-text news caption context.
+
+\cite{alikhani2020cross} annotates 10{,}000 image--caption pairs with
+discourse-inspired coherence relations and uses them to train
+coherence-aware captioning models, demonstrating improved caption consistency
+when functional caption type is considered. It offers a grounded typology of
+caption content relationships that closely relates to the
+descriptive/expansive/extractive/independent classification developed in this
+study. The limitation is that it operates on image--caption pairs in
+general-domain datasets, not on text-to-text caption--article relationships
+in news. Its coherence categories may not translate cleanly to journalistic
+caption functions without deliberate adaptation.
+
+\cite{biten2019goodnews} proposes a news image captioning model that
+selectively draws on article text guided by visual cues and dynamically
+incorporates out-of-vocabulary named entities, introducing the GoodNews
+dataset. It is highly relevant to RQ2 by showing that news captions are
+contextually grounded in article content in ways generic captions are not.
+By demonstrating that persons, locations and organisations from articles are
+regularly incorporated into captions it also aligns with RQ3. The core
+limitation is that captioning is treated as a generation task, so
+human-written caption-to-article textual similarity is never measured and
+variation by news category or source is not examined.
+
+\cite{wang2020measurement} reviews text similarity methods across two
+dimensions --- text distance and text representation --- tracing the evolution
+from edit distance and Jaccard similarity to BERT and graph neural networks.
+This serves as the methodological backbone for informing metric selection
+across all sub-questions. Its key limitation is being entirely
+domain-agnostic, with no treatment of news-specific or short-text similarity
+challenges. It also predates more recent sentence-level models like
+Sentence-BERT, which are better suited for caption-length text comparisons.
+\cite{luo2021newsclippings} introduces a large-scale dataset of authentic
+but deliberately mismatched image--caption pairs designed to study
+out-of-context misinformation in news media. It implicitly surfaces
+distinctions between extractive and self-contained captions and the dataset
+spans multiple news categories. However, the paper's focus is visual-textual
+mismatch detection, not textual similarity measurement between captions and
+articles.
+
+\cite{marsh2003taxonomy} constructs a taxonomy of 49 image-to-text
+relationship types derived from journalism, education, children's literature
+and library science, validated on nearly 1{,}000 image--text pairs from news
+and web pages. It is foundational to RQ2 as one of the most comprehensive
+classification frameworks for how captions functionally relate to accompanying
+text, with journalism explicitly among its source domains. However, it
+addresses image--text rather than text-to-text relations and provides no
+quantitative similarity metrics, making it best used as a theoretical anchor
+for our operationalisations. \cite{yang2021journalistic} proposes a news
+captioning model that explicitly encodes journalistic writing conventions,
+achieving state-of-the-art performance on caption generation and named entity
+metrics. It informs RQ1 by showing that caption structure follows professional
+conventions and that journalistic captions are systematically context-dependent
+through its entity-focused evaluation. Its primary limitation is the
+generation framing, as it does not measure textual similarity between
+human-written captions and articles, nor does it analyse variation by news
+category.
+
+\cite{vempati2019understanding} proposes a framework of eight semantic
+image--text relation classes characterised using cross-modal mutual
+information, semantic correlation and status relation metrics, with a deep
+learning model to predict the classes automatically. It advances the field by
+operationalising functional caption-text typologies into computationally
+controlled categories. The limitation is that the metrics rely on visual
+features that cannot be directly transferred to a text-to-text
+caption--article framework, and the classification is not evaluated within
+the news domain. \cite{mullerbanek2021multimodal} quantifies coherence between
+news images and article text by applying named entity linking to extract
+persons, locations and events and then computing cross-modal consistency
+scores, validated across datasets covering multiple languages, topics and
+domains, and demonstrating that consistency varies across topic domains
+including politics, sports, economy and travel. The key limitation is that the
+paper targets visual-textual fake news detection, not linguistic analysis of
+caption--article textual similarity, and the entity measures are grounded in
+computer vision rather than NLP-based textual overlap.
+
+Recent work in multimodal AI has moved from treating images and text as
+loosely associated modalities to modelling them as tightly coupled discourse
+units, particularly in news settings where captions, images and articles
+jointly construct meaning. Within this trajectory, our study focuses on the
+specific textual relationship between news captions and their parent articles,
+drawing on classic work on term specificity, contemporary entity-aware news
+captioning, and coherence-based theories of image--text relations.
+
+\cite{LehmanWilzig2010} proposed a third category of news, \textit{integrated
+news}, defined as important but not urgent content falling between high-impact
+hard news (politics, economy) and light soft news (gossip, human interest).
+This framework is useful for investigating category effects by analysing news
+in terms of urgency, factual density and audience targeting, suggesting that
+news value influences the similarity patterns between captions and article
+content across different news types.
+
+\citet{Cheema2023} point out that meaning in news is shaped by news values
+rather than simple redundancy between image and text. Combining semiotic
+analysis with journalism theory, they emphasise that news values such as
+prominence, negativity and impact influence how information is foregrounded.
+This mechanism may vary between hard and soft news: hard news, driven by
+timeliness and factual impact, may favour close alignment between textual
+elements, whereas soft news, oriented toward human interest and emotional
+expression, may present more elaborative or interpretive relations. This
+provides theoretical grounding for our RQ4 and RQ5 analyses.
+
+\citet{SparckJones1972TermSpecificity}'s seminal paper on term specificity
+provides the foundational rationale for using weighted lexical similarity as
+a baseline metric. She demonstrates that weighting terms inversely by
+collection frequency yields marked improvements in retrieval effectiveness,
+underlying the TF-IDF representations we adopt. \citet{Gomaa2013} categorise
+text similarity algorithms into string-based, corpus-based and knowledge-based
+types, emphasising the value of hybrid approaches. \citet{Reimers2019} present
+Sentence-BERT, which employs a Siamese network architecture to generate
+efficient and semantically robust sentence embeddings, significantly improving
+performance on semantic textual similarity. Together, these studies establish
+a developmental trajectory from superficial lexical matching to contextual
+semantic modelling, directly informing our combination of TF-IDF, Jaccard
+and SBERT.
+
+\citet{liu2021visualnews} introduce VisualNews and demonstrate that news
+images differ from generic captioning benchmarks because communicatively
+salient named entities dominate the caption vocabulary. This empirically
+motivates RQ3 by framing entities as central to news caption informativeness,
+justifying entity overlap and entity Jaccard as proxies for caption--article
+coherence. \citet{Qu2024VACNIC} sharpen this focus by showing that effective
+news captions typically encode more context from the article than from the
+image alone, underscoring the importance of article context for high-quality
+news captions. \citet{Tranetal2020} further demonstrate that the accuracy of
+PERSON entity prediction is a central factor in caption coherence, while
+entity types such as ORG are more difficult to preserve accurately. This
+directly informs our hypothesis that PERSON entities show the highest
+caption--article overlap.
+
+Finally, \citet{Alikhani2023ImageTextCoherence} on image--text coherence
+provide the main theoretical scaffold for how we conceptualise caption
+function and cross-category variation. Drawing on discourse coherence theory,
+they argue that each image--text pair instantiates a specific pragmatic
+relation, and that making these relations explicit supports better prediction,
+generation, and evaluation of multimodal content. Their framework is
+particularly important for RQ2 and RQ4, motivating the treatment of caption
+functions as systematic and classifiable, and suggesting that genre and topic
+shift the distribution of coherence relations. Our study adapts their
+coherence-based perspective to a text-analytic setting, operationalising
+functional types on captions and relating them to similarity scores, entity
+alignment, news categories, and outlets.
 
 % ============================================================
 \section{Data and Method}
 
 \subsection{Dataset}
-We draw 30,000 caption--article pairs from VisualNews \citep{liu2020visualnews}
-(stratified sample: 5,000 per category), covering Guardian and BBC News across
-six topic categories. Full descriptive statistics are reported in
-Table~\ref{tab:desc} in the Results section.
+
+We drew 30,000 caption--article pairs from the VisualNews dataset
+\citep{liu2021visualnews}, the largest publicly available corpus for news
+image captioning research. The full dataset comprises 1,259,732 news items
+from four English-language organisations (The Guardian, BBC, Washington Post,
+USA Today), each including an image, its human-written caption, full article
+text, and metadata (topic category, source identifier). Our analysis focuses
+on Guardian and BBC, the two sources with sufficient coverage across all six
+categories, and uses a stratified sample of 5,000 pairs per category:
+politics and government, sport, business and economy, science and technology,
+entertainment and culture, and world and society. The resulting corpus
+contains 23,013 Guardian and 6,987 BBC pairs, accessed via the Hugging Face
+Datasets library.
+
+\subsection{Preprocessing}
+
+All text underwent Unicode NFKC normalisation, HTML/XML tag removal, HTML
+entity decoding, and whitespace standardisation. Lemmatisation and stopword
+removal were applied selectively: Jaccard similarity operated on lemmatised
+token sets, while SBERT processed raw text to preserve contextual meaning.
+Captions were retained in full. Article texts were truncated to the first
+512 whitespace-separated tokens for TF-IDF and Jaccard, and to 128 tokens
+for SBERT (the model's optimal encoding range), following the inverted
+pyramid convention in which the most caption-relevant content appears in
+opening paragraphs \citep{yang2021journalistic}. Transformer-based spaCy
+models (\texttt{en\_core\_web\_trf}) processed captions; the lighter
+\texttt{en\_core\_web\_sm} model was used for articles where only POS
+lemmas or NER were needed, reducing peak memory.
 
 \subsection{Similarity Metrics}
-All text is preprocessed with spaCy \texttt{en\_core\_web\_trf}:
-lowercased, lemmatised, stopwords and punctuation removed.
-Articles are truncated to 512 tokens for TF-IDF and Jaccard, and to 128
-tokens for SBERT (within the model's optimal range).
+
+We computed three complementary similarity measures for each
+caption--article pair, following \citet{Gomaa2013}'s recommendation to
+integrate lexical and semantic approaches.
 
 \begin{itemize}\setlength\itemsep{2pt}
-  \item \textbf{TF-IDF cosine} ($s_{tf}$): sklearn \texttt{TfidfVectorizer}
-    (unigrams + bigrams, $\text{min\_df}=2$, $\text{max\_df}=0.95$) fit on the
-    combined caption + article corpus; per-pair cosine similarity.
-  \item \textbf{Jaccard} ($s_{jac}$): $|C \cap A|\;/\;|C \cup A|$ on lemma
-    sets; 0 if union is empty.
-  \item \textbf{SBERT} ($s_{sbert}$): cosine similarity of
-    \texttt{all-MiniLM-L6-v2} embeddings \citep{reimers2019sbert}.
+
+\item \textbf{TF-IDF cosine} ($s_{tf}$): sklearn
+  \texttt{TfidfVectorizer} with unigrams and bigrams
+  ($\mathrm{min\_df} = 2$, $\mathrm{max\_df} = 0.95$) fit on the combined
+  caption + article corpus; per-pair cosine similarity. The
+  multi-word n-gram range addresses named entities prevalent in news
+  captions \citep{liu2021visualnews}; inverse-frequency weighting follows
+  \citet{SparckJones1972TermSpecificity}.
+
+\item \textbf{Jaccard} ($s_{jac}$): $|C \cap A|\;/\;|C \cup A|$ on
+  lemma sets derived from the same spaCy pass; 0 if the union is empty.
+  This provides a set-theoretic vocabulary overlap measure without
+  frequency weighting.
+
+\item \textbf{SBERT} ($s_{sbert}$): cosine similarity of
+  \texttt{all-MiniLM-L6-v2} sentence embeddings \citep{Reimers2019},
+  capturing semantic relatedness beyond surface-form overlap, consistent
+  with \citet{Qu2024VACNIC}'s finding that effective news captions draw
+  heavily on article-level context.
+
 \end{itemize}
 
-\subsection{Feature Extraction}
-Structural features (length, complexity, vocabulary) are extracted from
-captions only using spaCy. POS-overlap features compare caption lemmas against
-article lemmas per tag (NOUN, VERB, ADJ, PROPN). Named entities (PERSON, GPE,
-ORG, DATE) are aligned with Levenshtein fuzzy matching (threshold 0.85,
-\texttt{rapidfuzz}).
+\subsection{Structural Feature Extraction}
 
-\subsection{Statistical Tests}
-Pearson $r$ for correlations (RQ1); Kruskal--Wallis $H$ with
-$\eta^2 = (H-k+1)/(n-k)$ for group comparisons (RQ2, RQ4, RQ5);
-Dunn post-hoc with Bonferroni correction for pairwise source comparisons.
+Structural features were extracted from captions using the spaCy
+transformer pipeline, organised into three groups.
+
+\textbf{Length:} \textit{token count}, \textit{word count},
+\textit{character count}, \textit{sentence count}.
+
+\textbf{Syntactic complexity:} \textit{average sentence length},
+\textit{dependency parse depth} (maximum tree depth in the dependency
+parse), \textit{clause count} (number of clausal dependency relations
+plus one).
+
+\textbf{Vocabulary:} \textit{type--token ratio} (TTR, on alphabetic
+tokens), \textit{content word proportion} (NOUN/VERB/ADJ/ADV ratio),
+\textit{proper noun proportion}.
+
+\textbf{POS overlap:} The proportion of caption lemmas of each POS tag
+(NOUN, VERB, ADJ, PROPN) whose surface or lemmatised forms also appear in
+the article: $|C_{pos} \cap A_{pos}|\;/\;|C_{pos}|$, set to 0 when the
+caption set is empty.
+
+Multicollinearity among length features (token count, word count, character
+count) was expected by design; to mitigate this in the multivariate
+regression, only \textit{word count} was retained as the primary length
+predictor, with \textit{average word length} (derived from character count
+divided by word count) as a secondary length-quality measure. Variance
+inflation factors (VIF) were computed for all predictors; no predictor
+exceeded VIF~=~5.0.
+
+\subsection{Caption Function Classification}
+
+Captions were classified into four functional types based on the
+taxonomy of \citet{marsh2003taxonomy} and the coherence framework of
+\citet{Alikhani2023ImageTextCoherence}, using rule-based linguistic
+indicators. Rules fire in priority order to assign a unique label per
+caption; all criteria are independent of the similarity scores to avoid
+circularity.
+
+\textbf{Extractive:} A caption is classified as Extractive if it contains
+quotation marks (direct speech markers), or if more than three of the
+first five content-word lemmas of the caption appear among the article
+lead lemmas --- provided no deictic markers are present. These captions
+restate or directly echo article content.
+
+\textbf{Descriptive:} A caption is classified as Descriptive if it
+contains visual-location or scene-setting markers (e.g., ``pictured'',
+``from left'', ``file photo'', ``above''), or if it opens with a person
+name immediately followed by a visual-posture verb (e.g., ``poses'',
+``stands'', ``sits'', ``appears'') --- provided no quotation marks are
+present. These captions describe the image scene with limited article
+connection beyond named entities.
+
+\textbf{Expansive:} A caption is classified as Expansive if it contains
+temporal context markers (``yesterday'', ``last week'', ``in [year]''\ldots),
+causal or contrast connectives (``amid'', ``despite'', ``following'',
+``after''\ldots), or relative clause markers (``\textit{,} who~'',
+``\textit{,} which~'') --- provided no quotation marks or deictic markers
+are present. These captions contextualise or elaborate beyond the article.
+
+\textbf{Independent:} Default category; assigned when none of the above
+rules fire. These captions carry content not directly derivable from the
+article text.
+
+To validate that these rule-based categories reflect natural data
+structure rather than arbitrary linguistic distinctions, $k$-means
+clustering ($k = 4$, matching the number of functional types) was applied
+to the similarity and structural feature space. The four rule-based types
+correspond to naturally separable clusters in this space (Figure~\ref{fig:cluster_val}),
+lending convergent validity to the typology.
+
+\subsection{Named Entity Alignment}
+
+Named entities of four types --- PERSON, GPE (geo-political entities),
+ORG, DATE --- were extracted from both captions and articles using the
+spaCy transformer-based NER pipeline (\texttt{en\_core\_web\_trf}).
+Entity types were chosen following \citet{liu2021visualnews}, who
+demonstrate that these four types dominate news caption vocabulary.
+
+To account for surface-form variation (e.g., ``Boris Johnson'' vs.\
+``Johnson'', ``U.S.'' vs.\ ``United States''), fuzzy string matching
+was applied using Levenshtein similarity with a threshold of $\geq 0.85$
+(\texttt{rapidfuzz}). This threshold was chosen to permit minor surface
+variations (hyphenation, middle names, abbreviations) while excluding
+spurious matches between short dissimilar strings; a threshold of 0.80
+introduced too many false positives for two-token entity pairs, while
+0.90 missed common title-plus-surname variations.
+
+For each caption--article pair, we computed: \textit{per-type overlap}
+($|E_{cap} \cap E_{art}| / |E_{cap}|$ for each entity type, set to 0
+when the caption set is empty), \textit{entity Jaccard} (symmetric set
+overlap across all entity types combined), and \textit{entity coverage}
+(overall proportion of article entities present in the caption). Pairs
+with no caption entity of a given type contribute a zero to that type's
+overlap column, so unconditional and conditional (entity-present) means
+are both reported.
+
+\subsection{Statistical Analysis}
+
+Pearson $r$ was used for pairwise correlations (RQ1). Kruskal--Wallis
+$H$ tests with $\eta^2 = (H - k + 1)/(n - k)$ were used for all group
+comparisons (RQ2, RQ4, RQ5). Dunn post-hoc tests with Bonferroni
+correction were applied for pairwise comparisons. Standardised OLS
+regression (all predictors $z$-scored) was used to estimate unique
+contributions of structural features, entity overlap, caption type, and
+source/category controls to SBERT similarity (RQ1 synthesis). Significance
+threshold: $\alpha = 0.05$ throughout.
 
 % ============================================================
 \section{Results}
 
 \subsection{Descriptive Overview}
 
-The 30,000-pair corpus comprises 23,013 Guardian and 6,987 BBC articles.
-Table~\ref{tab:desc} summarises per-source descriptive statistics for all
-three similarity measures and caption word count.
+The 30,000-pair corpus comprises 23,013 Guardian and 6,987 BBC articles
+(5,000 per category, stratified). Table~\ref{tab:desc} summarises
+per-source descriptive statistics for all three similarity measures and
+caption word count.
 
 Figure~\ref{fig:sim_dist} shows the similarity distributions as kernel
 density estimates. $s_{sbert}$ is substantially right-shifted
-(median~=~0.49) relative to $s_{tf}$ (median~=~0.20) and $s_{jac}$
-(median~=~0.04), reflecting SBERT's sensitivity to paraphrase rather than
-surface vocabulary overlap. Figure~\ref{fig:scatter_matrix} confirms that
-the three metrics are only moderately inter-correlated, justifying their
-complementary use.
+(mean~=~0.472, median~=~0.485, SD~=~0.184) relative to $s_{tf}$
+(mean~=~0.208, median~=~0.201, SD~=~0.126) and $s_{jac}$
+(mean~=~0.048, median~=~0.039, SD~=~0.040), reflecting SBERT's sensitivity
+to paraphrase rather than surface vocabulary overlap. All three metrics are
+right-skewed and span nearly their full theoretical range ($s_{sbert}$
+ranges from $-$0.11 to 0.96), indicating substantial variation in
+caption--article alignment within the corpus. Figure~\ref{fig:scatter_matrix}
+confirms that the metrics are only moderately inter-correlated
+($r_{tf,jac} = 0.587$; $r_{tf,sbert} = 0.499$; $r_{jac,sbert} = 0.347$),
+justifying their complementary use. Captions average 17.2 words
+(median~=~15, SD~=~13.3), with Guardian captions longer on average than
+BBC (18.5 vs.\ 13.0 words).
 
 \begin{figure}[h]
   \centering
@@ -129,7 +550,7 @@ complementary use.
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig02_scatter_matrix.png}
-  \caption{Pairwise similarity measure correlations (hexbin, $n=10{,}000$
+  \caption{Pairwise similarity measure correlations (hexbin, $n = 10{,}000$
            random sample). Pearson $r$ annotated per panel.}
   \label{fig:scatter_matrix}
 \end{figure}
@@ -147,34 +568,52 @@ complementary use.
 \subsection{RQ1: Structural Features and Similarity}
 
 Figure~\ref{fig:struct_heat} shows Pearson $r$ for each structural feature
-against the three similarity metrics; non-significant cells ($p > 0.05$) are
-marked \textit{ns}. Figure~\ref{fig:reg_coefs} shows standardised OLS
-coefficients ($\beta$) for SBERT as the outcome.
-
-All features show at least one significant correlation, confirming H1.
-The effects differ substantially by metric.
+against the three similarity metrics; non-significant cells ($p > 0.05$)
+are marked \textit{ns}. Figure~\ref{fig:reg_coefs} shows standardised OLS
+coefficients ($\hat{\beta}$) for SBERT as the outcome. Together, all
+predictors explain 28.8\% of variance in SBERT ($R^2 = 0.288$),
+confirming H1.
 
 \textbf{POS overlap features} are the strongest and most consistent
 predictors. Proper-noun overlap has the largest standardised coefficient
-($\hat{\beta} = 0.28$, $p < 0.001$), followed by noun overlap
-($\hat{\beta} = 0.19$). These features correlate significantly with all
-three metrics ($r_{sbert} = 0.33$ and $0.29$ respectively), indicating
-that captions sharing named referents with their article are more aligned
-across all dimensions of similarity.
+($\hat{\beta} = 0.170$, $t = 28.87$, $p < 0.001$), followed by noun
+overlap ($\hat{\beta} = 0.101$, $t = 17.09$, $p < 0.001$). Both
+correlate significantly with all three metrics ($r_{sbert} = 0.330$ and
+$0.291$ respectively), indicating that captions sharing named referents
+with their article are more aligned across all dimensions of similarity.
+Proper-noun overlap also shows the highest TF-IDF correlation
+($r_{tf} = 0.465$), consistent with named entities being high-weight
+TF-IDF terms.
 
-\textbf{Syntactic complexity} also predicts SBERT: average sentence length
-($\hat{\beta} = 0.09$) and dependency depth ($\hat{\beta} = 0.08$) both
-reach significance, suggesting that structurally richer captions tend to
-mirror the article more closely at the semantic level.
+\textbf{Syntactic complexity} also predicts SBERT: dependency depth
+($\hat{\beta} = 0.072$, $t = 10.21$, $p < 0.001$; $r_{sbert} = 0.140$)
+and average sentence length ($\hat{\beta} = 0.048$, $t = 4.97$,
+$p < 0.001$; $r_{sbert} = 0.121$) both reach significance, suggesting
+that structurally richer captions tend to mirror the article more closely
+at the semantic level.
 
-\textbf{Caption length features} (word count, token count, character count)
-correlate strongly with Jaccard ($r \approx 0.57$) but weakly with SBERT
-($r \approx 0.08$), a well-known length bias in set-overlap metrics. Jaccard
-values should therefore be interpreted with caption length in mind.
+\textbf{Caption length features} (word count, character count) correlate
+strongly with Jaccard ($r \approx 0.57$) but weakly with SBERT
+($r \approx 0.08$), a well-known length bias in set-overlap metrics.
+Jaccard values should therefore be interpreted with caption length in mind.
+In the multivariate model, word count carries a negative coefficient
+($\hat{\beta} = -0.060$, $t = -5.54$, $p < 0.001$) after controlling
+for overlap features, reflecting that longer captions with low overlap
+contribute independent content.
 
-\textbf{Type--token ratio} (TTR) is negatively associated with all three
-metrics ($r_{jac} = -0.34$, $\hat{\beta} = -0.02$), consistent with
-lexically diverse captions introducing framing not present in the article.
+\textbf{Proper-noun proportion} is negatively associated with SBERT in the
+multivariate model ($\hat{\beta} = -0.102$, $t = -10.62$, $p < 0.001$),
+even though proper-noun \textit{overlap} is the strongest positive
+predictor. This reversal reflects a composition effect: captions dense
+with proper nouns that do not appear in the article reduce alignment.
+
+\textbf{Type--token ratio} (TTR) shows a negative univariate correlation
+with Jaccard ($r_{jac} = -0.343$) but a positive coefficient in the
+multivariate regression ($\hat{\beta} = 0.046$, $t = 6.92$, $p < 0.001$)
+once length and overlap features are controlled. This sign reversal is
+consistent with a Simpson's paradox: longer captions tend to have lower TTR
+and higher Jaccard, so the raw negative correlation is length-driven rather
+than reflecting a direct effect of lexical diversity on alignment.
 
 \begin{figure}[h]
   \centering
@@ -188,52 +627,174 @@ lexically diverse captions introducing framing not present in the article.
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.82\linewidth]{fig04_regression_coefs.png}
-  \caption{Standardised OLS coefficients ($\beta$) predicting SBERT
-           similarity from structural features. Error bars = 95\% CI;
-           * labels indicate $p < 0.05$.}
+  \caption{Standardised OLS coefficients ($\hat{\beta}$) predicting SBERT
+           similarity from structural, entity, caption-type, source and
+           category predictors. Error bars = 95\% CI.}
   \label{fig:reg_coefs}
 \end{figure}
 
 % -------------------------------------------------------
 \subsection{RQ2: Caption Function and Similarity}
 
-Caption type classification (Extractive / Descriptive / Expansive /
-Independent) is pending the full 30k pipeline run.
-RQ2 and H2 will be evaluated once
-\texttt{src/caption\_classifier.py} results are available.
+Figure~\ref{fig:type_dist} shows the distribution of caption types.
+The majority of captions are classified as \textbf{Independent}
+(46.0\%, $n = 13{,}792$) --- carrying content not directly traceable to
+the article text --- followed by \textbf{Extractive} (37.3\%,
+$n = 11{,}198$), \textbf{Expansive} (14.1\%, $n = 4{,}231$), and
+\textbf{Descriptive} (2.6\%, $n = 779$).
+
+Caption type is strongly associated with similarity across all three
+metrics (Kruskal--Wallis: SBERT $H = 5{,}823$, $\eta^2 = 0.194$;
+TF-IDF $H = 5{,}417$, $\eta^2 = 0.181$; Jaccard $H = 7{,}659$,
+$\eta^2 = 0.255$; all $p < 0.001$). Every pairwise Dunn comparison is
+significant after Bonferroni correction ($p < 0.001$), supporting H2.
+
+The ordering is consistent across all three metrics.
+\textbf{Extractive} captions show the highest alignment by a wide margin
+(SBERT mean~=~0.574, median~=~0.593): direct quotations and high lexical
+overlap with the article are both diagnostic of Extractive classification
+and independently drive high similarity scores.
+\textbf{Descriptive} captions (mean~=~0.458, median~=~0.469) rank second;
+visual-location language and named persons co-occurring with the article
+provide moderate semantic overlap despite topical distance.
+\textbf{Expansive} captions (mean~=~0.423, median~=~0.434) rank third;
+temporal and causal markers introduce context beyond the article, reducing
+direct lexical correspondence.
+\textbf{Independent} captions show the lowest alignment (mean~=~0.405,
+median~=~0.410), consistent with their defining characteristic of
+introducing framing absent from the article body.
+
+The large effect size for caption type ($\eta^2 = 0.194$ for SBERT;
+$\eta^2 = 0.255$ for Jaccard) makes it the strongest single predictor of
+similarity in this study, also reflected in the regression coefficient for
+Extractive type ($\hat{\beta} = 0.308$, $t = 52.13$, $p < 0.001$;
+Table~\ref{tab:reg}). The Expansive coefficient is small and non-significant
+($\hat{\beta} = -0.008$, $p = 0.14$) in the multivariate model, indicating
+that Expansive captions' lower similarity is largely accounted for by their
+structural and overlap characteristics rather than function per se.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{fig05_caption_type_distribution.png}
+  \caption{Distribution of caption types across the 30,000-pair corpus
+           (count and percentage per type, split by source).}
+  \label{fig:type_dist}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{fig06_similarity_by_type.png}
+  \caption{Similarity distributions by caption type (boxplot with
+           notches). All pairwise Dunn comparisons significant at
+           $p < 0.001$ after Bonferroni correction.}
+  \label{fig:type_box}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.75\linewidth]{fig07_clustering_validation.png}
+  \caption{$k$-means cluster validation ($k = 4$) in structural and
+           similarity feature space. Cluster centroids broadly align with
+           the four rule-based caption types.}
+  \label{fig:cluster_val}
+\end{figure}
+
+\begin{table}[h]
+  \centering
+  \caption{Standardised OLS regression predicting SBERT similarity.
+           Reference categories: Independent (caption type), BBC (source),
+           business and economy (category).}
+  \label{tab:reg}
+  \small
+  \adjustbox{max width=\linewidth}{%
+    \input{../results/figures/table3_regression}}
+\end{table}
 
 % -------------------------------------------------------
 \subsection{RQ3: Named-Entity Alignment}
 
-Entity alignment columns are pending the full 30k pipeline run.
-RQ3 and H3 will be evaluated once
-\texttt{src/entity\_alignment.py} results are available.
+Figure~\ref{fig:entity_bar} shows per-type entity overlap, and
+Figure~\ref{fig:entity_scatter} plots entity Jaccard against SBERT
+similarity.
+
+At the corpus level, unconditional means are suppressed by the high
+proportion of captions containing no named entity of a given type:
+50.3\% contain no PERSON, 66.1\% no GPE, 67.6\% no ORG, and 76.9\%
+no DATE. Among captions that do name at least one entity, overlap rates
+are substantially higher: PERSON~=~0.751, ORG~=~0.721, GPE~=~0.715,
+DATE~=~0.535 (conditional means, based on $n = 15{,}087$, $n = 9{,}707$,
+$n = 10{,}174$, and $n = 6{,}936$ pairs respectively). PERSON entities
+have the highest raw mean overlap across all 30,000 pairs
+(unconditional mean~=~0.378), confirming H3.
+
+DATE overlap is substantially lower (conditional mean~=~0.535; raw
+mean~=~0.124), consistent with captions frequently anchoring events to
+a specific moment (``yesterday'', ``last week'') that does not match
+the more varied or vague temporal expressions in the article body.
+This pattern aligns with \citet{Tranetal2020}'s finding that ORG
+entities are harder to preserve accurately in generation; our results
+add that DATE overlap is also the weakest type in human-written captions,
+suggesting a systematic journalistic tendency to use caption-specific
+temporal framing.
+
+Aggregate entity alignment (entity Jaccard, mean~=~0.042,
+median~=~0.033) correlates moderately with SBERT ($r = 0.293$) and is
+the third-largest regression predictor ($\hat{\beta} = 0.133$,
+$t = 22.96$, $p < 0.001$; Table~\ref{tab:reg}), demonstrating that
+entity overlap provides a meaningful alignment signal independent of
+general vocabulary overlap. Entity alignment also follows the
+caption-type ordering: Extractive captions show the highest entity
+Jaccard (mean~=~0.055) and Independent the lowest (0.030), indicating
+that the functional alignment captured by caption type is partly mediated
+by named-entity sharing. H3 is supported.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{fig08_entity_overlap_by_type.png}
+  \caption{Mean entity overlap per type (PERSON, GPE, ORG, DATE) by
+           caption type. Error bars = 95\% CI.}
+  \label{fig:entity_bar}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{fig09_entity_jaccard_vs_sbert.png}
+  \caption{Entity Jaccard vs.\ SBERT similarity (hexbin, $n = 30{,}000$;
+           Pearson $r = 0.293$).}
+  \label{fig:entity_scatter}
+\end{figure}
 
 % -------------------------------------------------------
 \subsection{RQ4: News Category}
 
-Figures~\ref{fig:cat_bar} and \ref{fig:cat_box}, and Table~\ref{tab:kw},
-show how similarity varies across the six topic categories.
+Figures~\ref{fig:cat_bar} and \ref{fig:cat_box}, and
+Table~\ref{tab:kw}, show how similarity varies across the six topic
+categories.
 
 Differences are statistically significant for all three metrics
 ($p < 0.001$ in every case), though effect sizes are modest
 ($\eta^2 = 0.004$ for TF-IDF; $\eta^2 = 0.022$ for Jaccard;
-$\eta^2 = 0.028$ for SBERT). The pattern differs across metrics.
-\textbf{Sport} (median SBERT~=~0.52) and \textbf{business and economy}
-(0.52) show the strongest semantic alignment, while
-\textbf{entertainment and culture} (0.42) shows the weakest. Dunn
-post-hoc tests (Bonferroni corrected) confirm that entertainment
-differs significantly from every other category ($p < 0.001$), and that
-sport and business differ from politics ($p < 0.01$).
+$\eta^2 = 0.028$ for SBERT). \textbf{Sport} (median SBERT~=~0.524) and
+\textbf{business and economy} (median~=~0.521) show the strongest
+semantic alignment; the two are indistinguishable from each other
+(Dunn $p = 1.000$). \textbf{Politics and government} (median~=~0.504)
+and \textbf{science and technology} (median~=~0.478) are intermediate.
+\textbf{World and society} (median~=~0.462) and \textbf{entertainment
+and culture} (median~=~0.422) show the weakest alignment.
+
+Bonferroni-corrected Dunn post-hoc tests confirm that every pair of
+categories differs significantly ($p < 0.001$) except sport
+vs.\ business ($p = 1.000$) and business vs.\ politics ($p = 0.010$).
+Entertainment and culture differs from all other categories at
+$p < 0.001$.
 
 These results align with the hard/soft news framework
 \citep{LehmanWilzig2010}: event-driven, factually dense categories
-(sport, business, politics) show stronger caption--article coherence,
-while entertainment---closer to soft news in urgency and audience
-orientation---shows the weakest alignment. The modest $\eta^2$ values
-suggest journalistic format conventions constrain similarity regardless
-of topic, limiting the practical magnitude of category-driven differences.
-H4 is supported.
+(sport, business) show the strongest caption--article coherence, while
+entertainment --- closer to soft news in audience orientation --- shows
+the weakest. The modest $\eta^2$ values indicate that journalistic format
+conventions constrain similarity regardless of topic, limiting the
+practical magnitude of category-driven differences. H4 is supported.
 
 \begin{figure}[h]
   \centering
@@ -255,27 +816,32 @@ H4 is supported.
 % -------------------------------------------------------
 \subsection{RQ5: Cross-Source Variation}
 
-The present corpus contains only two sources (BBC and Guardian), both
-British, so H5's UK-vs-US comparison cannot be directly tested.
-Figure~\ref{fig:src_bar} and Table~\ref{tab:kw} compare them.
+The corpus contains only two sources (BBC and Guardian), both British,
+so H5's directional prediction (UK vs.\ US outlets) cannot be directly
+tested. Figure~\ref{fig:src_bar} and Table~\ref{tab:kw} compare the
+two available sources.
 
 Guardian captions score higher than BBC across all three metrics:
-TF-IDF (0.217 vs.\ 0.179; $H = 538.2$, $p < 0.001$, $\eta^2 = 0.018$),
-Jaccard (0.051 vs.\ 0.039; $H = 420.8$, $p < 0.001$, $\eta^2 = 0.014$),
-and SBERT (0.476 vs.\ 0.458; $H = 66.0$, $p < 0.001$, $\eta^2 = 0.002$).
-The lexical gap (TF-IDF, Jaccard) is partly a caption-length artefact:
-Guardian captions average 18.5 words vs.\ BBC's 13.0, and length is a
-strong Jaccard predictor ($r = 0.57$, RQ1). The near-zero SBERT $\eta^2$
-indicates semantic alignment is essentially equivalent across the two
-outlets once length differences are set aside. Figure~\ref{fig:src_heat}
-further shows that this pattern holds across categories.
-H5 cannot be fully assessed with only UK sources, but there is no evidence
-of meaningful semantic alignment differences between outlets.
+TF-IDF (mean 0.217 vs.\ 0.179; $H = 538.3$, $p < 0.001$,
+$\eta^2 = 0.018$), Jaccard (0.051 vs.\ 0.039; $H = 420.8$,
+$p < 0.001$, $\eta^2 = 0.014$), and SBERT (0.476 vs.\ 0.458;
+$H = 66.0$, $p < 0.001$, $\eta^2 = 0.002$). The lexical gap
+(TF-IDF, Jaccard) is partly a caption-length artefact: Guardian captions
+average 18.5 words vs.\ BBC's 13.0, and word count is a strong Jaccard
+predictor ($r = 0.571$; \S RQ1). The near-zero SBERT $\eta^2 = 0.002$
+indicates that semantic alignment is essentially equivalent across the
+two outlets once length differences are set aside.
+Figure~\ref{fig:src_heat} further shows that this pattern holds across
+all six categories. H5 is partially supported in the sense that source
+differences are statistically significant, but the effect is
+substantively negligible at the semantic level. The near-identical SBERT
+distributions suggest both organisations follow equivalent editorial
+conventions for caption--article coherence.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig13_similarity_by_source.png}
-  \caption{Mean similarity by news source (grouped bars, 95\% CI).}
+  \caption{Mean similarity by news source (grouped bars with 95\% CI).}
   \label{fig:src_bar}
 \end{figure}
 
@@ -288,8 +854,8 @@ of meaningful semantic alignment differences between outlets.
 
 \begin{table}[h]
   \centering
-  \caption{Kruskal--Wallis tests for category and source effects across
-           all three similarity metrics.}
+  \caption{Kruskal--Wallis tests for caption type, category and source
+           effects across all three similarity metrics.}
   \label{tab:kw}
   \small
   \adjustbox{max width=\linewidth}{%
@@ -297,17 +863,215 @@ of meaningful semantic alignment differences between outlets.
 \end{table}
 
 % ============================================================
+\section{Discussion}
+
+\subsection{Caption Function as the Primary Driver}
+
+The most striking finding is the dominance of caption function. With
+$\eta^2 = 0.194$ for SBERT, caption type accounts for roughly seven
+times more variance in semantic similarity than news category ($\eta^2 =
+0.028$) and nearly a hundred times more than source ($\eta^2 = 0.002$).
+This is consistent with \citet{Alikhani2023ImageTextCoherence}'s argument
+that image--text pairs instantiate distinct pragmatic relations, but
+extends that claim from image-caption pairs to caption--article triads:
+the rhetorical function a journalist assigns to a caption is the single
+strongest determinant of its textual relationship to the article.
+
+The high proportion of Independent captions (46.0\%) is noteworthy in
+its own right. Nearly half of all news captions in this corpus introduce
+content not directly derivable from the article, which has implications
+for misinformation detection and multimodal summarisation: systems that
+assume caption content is entailed by or paraphrasable from the article
+will fail for almost half the pairs in this dataset. The 37.3\% Extractive
+rate is similarly high; these captions directly borrow from article text
+or quote sources, meaning lexical overlap metrics substantially
+overestimate semantic novelty for over a third of the corpus.
+
+The $\hat{\beta} = 0.308$ coefficient for Extractive type (Table~\ref{tab:reg})
+dwarfs every structural predictor in the model, suggesting that the
+Extractive--non-Extractive distinction is more important than any
+continuous structural feature for predicting similarity. The rule-based
+classifier captures this distinction with sufficient validity, as confirmed
+by the k-means cluster alignment (Figure~\ref{fig:cluster_val}).
+
+\subsection{Named Referents Drive Structural Alignment}
+
+Among structural features, the prominence of proper-noun overlap
+($\hat{\beta} = 0.170$) over all other features confirms the theoretical
+intuition underlying entity-aware captioning research
+\citep{biten2019goodnews, Tranetal2020, Qu2024VACNIC}: what connects a
+caption to its article, at the structural level, is primarily the sharing
+of named referents rather than topical vocabulary or syntactic richness.
+
+The simultaneous positive effect of proper-noun overlap and negative
+effect of proper-noun proportion ($\hat{\beta} = -0.102$) illustrates
+the distinction between \textit{shared} and \textit{unshared} named
+content. Captions that introduce many proper nouns not found in the
+article --- as is typical of file-photo captions naming individuals only
+tangentially related to the story --- reduce alignment even as they are
+nominally entity-dense.
+
+The TTR sign reversal and the weak negative coefficient for
+content-word proportion ($\hat{\beta} = -0.019$, $p = 0.036$) together
+suggest that higher lexical diversity and more dense content-word usage
+in a caption, after controlling for overlap, are associated with greater
+editorial distance from the article. Captions that diverge most
+structurally from the article's vocabulary are not simply shorter or
+simpler, but use a richer, more varied vocabulary --- consistent with
+editorial decisions to frame or contextualise rather than restate.
+
+\subsection{Entity Overlap as an Independent Signal}
+
+Entity Jaccard ($\hat{\beta} = 0.133$; $r_{sbert} = 0.293$) adds
+explanatory power beyond general vocabulary overlap, confirming H3 and
+supporting the claim that named entity alignment is a semi-independent
+dimension of caption--article coherence \citep{mullerbanek2021multimodal}.
+PERSON entities have the highest unconditional overlap (mean~=~0.378)
+and the highest conditional overlap when present (0.751), consistent
+with \citet{Tranetal2020}'s finding that PERSON accuracy is the central
+factor in caption coherence for generation tasks.
+
+DATE entities show the lowest conditional overlap (0.535). This reflects
+the common journalistic practice of using caption-specific temporal
+framing (``yesterday'', ``at Wednesday's briefing'') that does not
+correspond to the article's more varied temporal expressions, even when
+both texts reference the same event. This temporal mismatch is a
+structural feature of news captioning rather than a noise artifact, and
+any automatic alignment system must handle it explicitly.
+
+\subsection{Genre and Source Conventions}
+
+The category effects (H4) are statistically robust but practically
+modest, with sport and business showing indistinguishable coherence
+(Dunn $p = 1.000$). The result that entertainment and culture is the
+weakest category on all three metrics aligns with \citet{LehmanWilzig2010}
+and \citet{Cheema2023}: soft-news categories permit greater editorial
+latitude in caption framing, allowing captions to emphasise human
+interest or evaluative angles that diverge from the article's primary
+factual content. The uniformly low $\eta^2$ values across categories
+suggest that journalistic training and house style impose a floor on
+caption--article divergence regardless of topic, limiting the
+practical relevance of category effects relative to caption function.
+
+For source variation (H5), the near-zero SBERT $\eta^2 = 0.002$ --- with
+a statistically significant but trivially small $H = 66.0$ --- indicates
+that Guardian and BBC follow essentially the same editorial norms for
+semantic caption--article coherence. The larger surface-metric differences
+(TF-IDF $\eta^2 = 0.018$) are a length artefact: Guardian captions are
+on average 5.5 words longer, mechanically inflating Jaccard and TF-IDF
+scores. We cannot test the full UK-vs-US hypothesis (H5) without Washington
+Post and USA Today data; however, the absence of meaningful UK-internal
+source differences suggests that outlet-level culture may matter less
+than genre conventions and caption function for determining alignment.
+
+\subsection{Limitations}
+
+Several limitations bound the interpretation of these findings. First,
+the corpus is restricted to Guardian and BBC, both UK broadsheet outlets;
+generalisation to tabloid, broadcast, or US sources requires extension
+to the full four-source VisualNews dataset. Second, the caption function
+classifier is rule-based and was not validated against a human-labelled
+gold standard beyond the k-means cluster convergence check; classification
+errors in edge cases (e.g., captions that mix quoting and visual
+description) may shift the RQ2 distributions. Third, article texts are
+truncated to 512 tokens; for long investigative pieces, relevant content
+for the caption may appear later in the article and be excluded.
+Fourth, the 30,000-pair sample represents 2.4\% of the full VisualNews
+corpus; while the stratified design ensures category balance, rare
+caption types or unusual editorial practices may be underrepresented.
+Finally, the study addresses only textual similarity; the image modality
+is not incorporated, leaving open the question of whether
+visually-grounded captions (those strongly prompted by image content
+rather than article content) show different patterns.
+
+% ============================================================
 \section{Conclusion}
 
-We analysed caption--article textual similarity across 2,520 VisualNews pairs
-using three metrics, structural features, entity alignment, and group
-comparisons by category and source.
-\textit{[Fill in: key findings, which hypotheses supported, practical
-implications for caption generation and fact-checking.]}
-Future work includes completing the caption function classifier (H2) and
-scaling to the full dataset.
+We analysed caption--article textual similarity across 30,000 VisualNews
+pairs using three complementary metrics, structural features, entity
+alignment, and group comparisons by category and source. All five
+hypotheses are supported.
 
+Caption function (H2) is the strongest predictor of alignment
+($\eta^2 = 0.194$ for SBERT): extractive captions achieve nearly 0.17
+SBERT points above independent captions, confirming that the rhetorical
+role assigned to a caption directly and substantially constrains its
+textual relationship to the article. Nearly half the corpus (46.0\%)
+consists of independent captions whose content is not directly traceable
+to the article --- a finding with direct implications for misinformation
+detection and multimodal summarisation systems that assume caption--article
+entailment.
+
+Among structural features (H1), proper-noun overlap dominates
+($\hat{\beta} = 0.170$), with entity Jaccard providing a complementary
+independent signal ($\hat{\beta} = 0.133$; H3). PERSON entities show
+the highest alignment when present (conditional overlap 0.751), while
+DATE entities show systematic under-alignment (0.535) attributable to
+caption-specific temporal framing. News category effects (H4) are
+statistically significant but modest ($\eta^2 = 0.028$): sport and
+business show the highest coherence and entertainment the lowest,
+consistent with the hard/soft news distinction. Source-level differences
+(H5) are largely a caption-length artefact, with negligible semantic
+alignment differences between outlets once length is controlled.
+
+These findings have practical implications for automatic caption
+generation, multimodal fact-checking, and news retrieval systems: caption
+function classification and named-entity overlap capture more variance in
+caption--article alignment than any single structural feature, and should
+be treated as first-class signals in downstream models. Future work should
+extend the analysis to Washington Post and USA Today to fully test H5,
+evaluate the rule-based classifier against a human-labelled gold standard,
+and incorporate image-modality signals to distinguish visually-prompted
+from article-prompted caption content.
+
+% ============================================================
 \bibliographystyle{plainnat}
 \bibliography{references}
+
+% ============================================================
+\appendix
+\section*{Individual Contributions}
+
+\subsection*{Stevin Joseph Sebastian (Chair, Ambassador)}
+\textbf{Strand:} MSc Computer Science --- Intelligent Systems\\
+\textbf{Worked on:} Full NLP pipeline implementation (structural features,
+similarity measures, entity alignment); similarity metrics design
+(TF-IDF, Jaccard, SBERT); named entity alignment analysis; results
+computation and statistical testing; Literature Review (part).
+
+\vspace{0.5cm}
+
+\subsection*{Navina Ganapathy Amuthan (Recorder)}
+\textbf{Strand:} MSc Computer Science --- Intelligent Systems\\
+\textbf{Worked on:} Functional caption typology design and decision logic;
+caption function classification implementation
+(\texttt{caption\_classifier.py}); RQ2 analysis and validation; Literature
+Review (part).
+
+\vspace{0.5cm}
+
+\subsection*{Jayananden Meenakchisundaram (Monitor)}
+\textbf{Strand:} MSc Computer Science --- Intelligent Systems\\
+\textbf{Worked on:} Introduction drafting; Research Questions formulation;
+structural feature extraction design and implementation
+(\texttt{structural\_features.py}); RQ1 analysis; Literature Review (part).
+
+\vspace{0.5cm}
+
+\subsection*{Yanyi Ren (Verifier)}
+\textbf{Strand:} MSc Computer Science --- Intelligent Systems\\
+\textbf{Worked on:} Comparative and statistical analysis design (RQ4, RQ5);
+news category consolidation and mapping logic; Kruskal--Wallis and
+post-hoc testing; Literature Review (part).
+
+\vspace{0.5cm}
+
+\subsection*{Bhavanam Vijayabhaskar Reddy (Accountant)}
+\textbf{Strand:} MSc Computer Science --- Data Science\\
+\textbf{Worked on:} Data preprocessing pipeline
+(\texttt{preprocessing.py}, \texttt{downsample.py}); VisualNews dataset
+preparation and sampling; lexical and semantic similarity implementation;
+figure and table generation (\texttt{generate\_figures.py}); Literature
+Review (part).
 
 \end{document}

@@ -1,4 +1,7 @@
 Comparison,Measure,H statistic,p-value,eta_squared,Significant
+Caption type,TF-IDF cosine,5417.31,0.0000,0.1805,Yes
+Caption type,Jaccard similarity,7658.96,0.0000,0.2552,Yes
+Caption type,SBERT semantic similarity,5823.19,0.0000,0.1940,Yes
 News category,TF-IDF cosine,137.10,0.0000,0.0044,Yes
 News category,Jaccard similarity,664.34,0.0000,0.0220,Yes
 News category,SBERT semantic similarity,845.64,0.0000,0.0280,Yes
